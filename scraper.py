@@ -42,6 +42,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 import urllib3
 from bs4 import BeautifulSoup
@@ -127,6 +129,7 @@ class CNBVScraper:
         self.max_pages = max_pages
         self.period = period
         self.download_docs = download_docs
+        self.parallel_workers = 1
         self.session = requests.Session()
         self.session.verify = False
         self.hidden_fields: dict[str, str] = {}
@@ -588,6 +591,93 @@ class CNBVScraper:
         )
         return None
 
+    # ----- Parallel downloads -----
+
+    def _download_worker(self, enc: str, filename_hint: str) -> str | None:
+        """Download a single file using a fresh session (thread-safe)."""
+        worker_session = requests.Session()
+        worker_session.verify = False
+        detail_url = f"{DETALLE_URL}?enc={enc}"
+
+        try:
+            resp1 = worker_session.get(detail_url, headers=BROWSER_HEADERS, timeout=30)
+            if resp1.status_code != 200:
+                return None
+            soup = BeautifulSoup(resp1.text, "html.parser")
+            title = soup.find("title")
+            if title and "Error" in title.get_text():
+                return None
+
+            hidden = extract_hidden_fields(soup)
+            page_text = soup.get_text()
+            archivo_match = re.search(r"Archivo adjunto:\s*(.+?)(?:\n|$)", page_text)
+            attached_name = archivo_match.group(1).strip() if archivo_match else filename_hint
+
+            post_data = {**hidden, "__EVENTTARGET": "DataViewContenido$DescargaArchivo", "__EVENTARGUMENT": ""}
+            resp2 = worker_session.post(
+                detail_url, data=post_data,
+                headers={**BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded", "Referer": detail_url},
+                timeout=60,
+            )
+
+            content_type = resp2.headers.get("Content-Type", "")
+            is_pdf = "pdf" in content_type.lower() or resp2.content[:4] == b"%PDF"
+            is_file = "application/" in content_type and "html" not in content_type.lower()
+            if not is_pdf and not is_file:
+                return None
+
+            content_disp = resp2.headers.get("Content-Disposition", "")
+            disp_match = re.search(r"filename=(.+?)(?:;|$)", content_disp)
+            if disp_match:
+                file_name = requests.utils.unquote(disp_match.group(1).strip("\"' "))
+            else:
+                file_name = sanitize_filename(attached_name)
+                if not any(file_name.lower().endswith(ext) for ext in (".pdf", ".xls", ".xlsx", ".doc", ".docx", ".zip")):
+                    file_name += ".pdf" if is_pdf else ".bin"
+
+            os.makedirs(self.pdf_dir, exist_ok=True)
+            file_path = os.path.join(self.pdf_dir, sanitize_filename(file_name))
+            with open(file_path, "wb") as f:
+                f.write(resp2.content)
+            return file_path
+        except Exception as e:
+            log.warning("Download worker error: %s", e)
+            return None
+        finally:
+            worker_session.close()
+
+    def download_batch_parallel(self, filings: list[dict[str, Any]], workers: int = 5) -> None:
+        """Download documents for multiple filings in parallel."""
+        # Phase 1: Resolve enc values sequentially (shares session state)
+        to_download: list[tuple[int, str, str]] = []
+        for i, filing in enumerate(filings):
+            key = filing.get("key")
+            if not key:
+                continue
+            time.sleep(REQUEST_DELAY)
+            enc = self.get_filing_enc(key)
+            if enc:
+                hint = f"{filing['emisora']}_{filing['asunto']}.pdf"
+                to_download.append((i, enc, hint))
+            else:
+                log.warning("  [%d] No enc for key=%s", i + 1, key)
+
+        log.info("Resolved %d enc values. Downloading with %d parallel workers...", len(to_download), workers)
+
+        # Phase 2: Download in parallel (each worker uses its own session)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {}
+            for idx, enc, hint in to_download:
+                future = pool.submit(self._download_worker, enc, hint)
+                futures[future] = idx
+
+            for future in as_completed(futures):
+                idx = futures[future]
+                path = future.result()
+                filings[idx]["pdf_path"] = path
+                if path:
+                    log.info("  [%d/%d] Downloaded: %s", idx + 1, len(filings), path)
+
     # ----- Monitor mode -----
 
     def _load_state(self) -> dict:
@@ -640,13 +730,17 @@ class CNBVScraper:
             "fecha": fecha_match.group(1).strip() if fecha_match else "?",
         }
 
-    def monitor(self, interval: int = 300, look_ahead: int = 5) -> None:
+    def monitor(self, interval: int = 300) -> None:
         """
         Monitor mode: poll for new filings by probing sequential keys.
 
+        Adaptive look-ahead: starts at 5, but if all 5 hit, doubles the
+        window (up to 200) to handle bulk uploads. Shrinks back to 5
+        when a cycle finds nothing. This means a 1,000-filing burst
+        gets caught in ~10 cycles instead of 200.
+
         Args:
-            interval: Seconds between poll cycles (default: 300 = 5 min).
-            look_ahead: How many keys ahead to probe per cycle (default: 5).
+            interval: Seconds between poll cycles when idle (default: 300).
         """
         self.initialize()
 
@@ -667,25 +761,34 @@ class CNBVScraper:
                 log.error("Could not find any filings to establish baseline. Use --start-key.")
                 return
 
+        look_ahead = 5
+        consecutive_misses = 0
+        MAX_LOOK_AHEAD = 200
+
         log.info("=" * 60)
         log.info("MONITOR MODE — watching for new filings")
         log.info("  Last known key: %d", last_key)
-        log.info("  Poll interval: %ds", interval)
-        log.info("  Look-ahead: %d keys", look_ahead)
+        log.info("  Poll interval: %ds (idle)", interval)
+        log.info("  Adaptive look-ahead: 5–%d keys", MAX_LOOK_AHEAD)
         log.info("=" * 60)
 
         try:
             while True:
                 new_count = 0
+                miss_streak = 0
+
                 for offset in range(1, look_ahead + 1):
                     probe = last_key + offset
-                    log.debug("Probing key %d...", probe)
 
                     filing = self.probe_key(probe)
                     if not filing:
+                        miss_streak += 1
+                        # Stop early if we hit 3 consecutive misses (end of new filings)
+                        if miss_streak >= 3:
+                            break
                         continue
 
-                    # New filing found!
+                    miss_streak = 0
                     new_count += 1
                     last_key = probe
                     log.info(
@@ -695,7 +798,6 @@ class CNBVScraper:
                         filing["asunto"][:40],
                     )
 
-                    # Download document
                     if self.download_docs:
                         time.sleep(REQUEST_DELAY)
                         pdf_path = self.download_pdf_with_enc(
@@ -704,16 +806,34 @@ class CNBVScraper:
                         )
                         filing["pdf_path"] = pdf_path
 
-                    # Append to output file
                     self._append_filing(filing)
                     time.sleep(REQUEST_DELAY)
 
                 if new_count:
                     state["last_key"] = last_key
                     self._save_state(state)
-                    log.info("Processed %d new filing(s). Last key: %d", new_count, last_key)
+
+                    # Adaptive: if we found filings in every slot, expand window
+                    if new_count >= look_ahead - 2:
+                        look_ahead = min(look_ahead * 2, MAX_LOOK_AHEAD)
+                        log.info(
+                            "Processed %d new filing(s). Last key: %d. "
+                            "Expanding look-ahead to %d (burst detected).",
+                            new_count, last_key, look_ahead,
+                        )
+                        # Don't sleep — immediately check for more
+                        continue
+                    else:
+                        look_ahead = 5  # Reset
+                        log.info("Processed %d new filing(s). Last key: %d.", new_count, last_key)
+                        consecutive_misses = 0
                 else:
-                    log.info("No new filings. Last key: %d. Sleeping %ds...", last_key, interval)
+                    consecutive_misses += 1
+                    look_ahead = 5  # Reset
+                    log.info(
+                        "No new filings. Last key: %d. Sleeping %ds...",
+                        last_key, interval,
+                    )
 
                 time.sleep(interval)
 
@@ -762,22 +882,23 @@ class CNBVScraper:
         pdf_fail = 0
 
         if self.download_docs:
-            for i, filing in enumerate(filings):
-                log.info(
-                    "[%d/%d] %s | %s | %s",
-                    i + 1,
-                    len(filings),
-                    filing["fecha"][:16],
-                    filing["emisora"],
-                    filing["asunto"][:40],
-                )
+            if self.parallel_workers > 1:
+                self.download_batch_parallel(filings, workers=self.parallel_workers)
+            else:
+                for i, filing in enumerate(filings):
+                    log.info(
+                        "[%d/%d] %s | %s | %s",
+                        i + 1,
+                        len(filings),
+                        filing["fecha"][:16],
+                        filing["emisora"],
+                        filing["asunto"][:40],
+                    )
+                    pdf_path = self.attempt_pdf_download(filing)
+                    filing["pdf_path"] = pdf_path
 
-                pdf_path = self.attempt_pdf_download(filing)
-                filing["pdf_path"] = pdf_path
-                if pdf_path:
-                    pdf_success += 1
-                else:
-                    pdf_fail += 1
+            pdf_success = sum(1 for f in filings if f.get("pdf_path"))
+            pdf_fail = len(filings) - pdf_success
         else:
             log.info("Skipping document downloads (--no-download)")
 
@@ -844,6 +965,12 @@ def main() -> int:
         help="Skip document downloads (extract metadata only)",
     )
     parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Number of parallel download workers (default: 1 = sequential)",
+    )
+    parser.add_argument(
         "--monitor",
         action="store_true",
         help="Monitor mode: poll for new filings continuously",
@@ -870,6 +997,7 @@ def main() -> int:
         period=args.period,
         download_docs=not args.no_download,
     )
+    scraper.parallel_workers = args.parallel
 
     if args.monitor:
         if args.start_key:
@@ -878,6 +1006,7 @@ def main() -> int:
             with open(state_file, "w") as f:
                 json.dump({"last_key": args.start_key}, f)
         scraper.monitor(interval=args.interval)
+
     else:
         scraper.run()
     return 0
