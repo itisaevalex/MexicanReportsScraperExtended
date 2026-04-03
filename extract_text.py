@@ -191,6 +191,34 @@ def _xls_to_text_images(xls_path: str) -> list:
     return images
 
 
+def zip_to_images(zip_path: str, max_pages: int = 0) -> list:
+    """Extract files from ZIP and convert each to images."""
+    import zipfile
+    import tempfile
+
+    images = []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zf.extractall(tmpdir)
+                for extracted in sorted(Path(tmpdir).rglob("*")):
+                    if not extracted.is_file():
+                        continue
+                    suffix = extracted.suffix.lower()
+                    if suffix == ".pdf":
+                        images.extend(pdf_to_images(str(extracted), max_pages=max_pages))
+                    elif suffix in (".xls", ".xlsx"):
+                        images.extend(xls_to_images(str(extracted)))
+                    elif suffix in (".png", ".jpg", ".jpeg", ".tiff", ".bmp"):
+                        from PIL import Image
+                        images.append(Image.open(str(extracted)).convert("RGB"))
+                    else:
+                        log.info("  ZIP: skipping %s (%s)", extracted.name, suffix)
+    except zipfile.BadZipFile:
+        log.warning("Bad ZIP file: %s", zip_path)
+    return images
+
+
 def file_to_images(file_path: str, max_pages: int = 0) -> list:
     """Convert any supported file type to a list of PIL images."""
     path = Path(file_path)
@@ -201,8 +229,7 @@ def file_to_images(file_path: str, max_pages: int = 0) -> list:
     elif suffix in (".xls", ".xlsx"):
         return xls_to_images(file_path)
     elif suffix == ".zip":
-        log.info("Skipping ZIP: %s", path.name)
-        return []
+        return zip_to_images(file_path, max_pages=max_pages)
     else:
         log.warning("Unsupported file type: %s", suffix)
         return []
@@ -264,8 +291,8 @@ def process_filings(
         data = json.load(f)
 
     filings = data.get("filings", [])
-    processable = [f for f in filings if f.get("pdf_path") and not f["pdf_path"].endswith(".zip")]
-    log.info("Processing %d filings (%d total, skipping ZIPs)", len(processable), len(filings))
+    processable = [f for f in filings if f.get("pdf_path")]
+    log.info("Processing %d filings (%d total)", len(processable), len(filings))
 
     client = create_ollama_client()
     results = []

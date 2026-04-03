@@ -126,26 +126,52 @@ Initial GET revealed the page structure: ASP.NET WebForms with a `ScriptManager`
 | "Length cannot be less than zero" | Missing `c0:` prefix on callbacks | Playwright network capture |
 | Pagination returns page 1 | Action length field + sync vs async ViewState | Playwright + byte comparison |
 
-## Production Considerations
+## OCR Text Extraction (Extended)
 
-- **Rate limiting**: Azure WAF throttles rapid requests. 1-second delay between requests.
-- **Parallelism**: PDF downloads can be parallelized with `ThreadPoolExecutor`.
-- **Retry logic**: Add exponential backoff for 403/5xx responses.
-- **Scale**: ~14,000 filings × 3 requests each (enc + detail + download) = ~42,000 requests. At 1 req/sec, full scrape takes ~12 hours.
+Beyond scraping, `extract_text.py` processes each downloaded document through **Qwen3.5-397B** vision model on Ollama Cloud to extract structured JSON:
+
+```bash
+export OLLAMA_API_KEY=your_key
+python extract_text.py                        # Process all filings
+python extract_text.py --file pdfs/doc.pdf    # Single file
+python extract_text.py --max-pages 3          # Limit pages per doc
+```
+
+### How It Works
+
+1. **PDF** pages are converted to images via `pdf2image` (poppler)
+2. **XLS/XLSX** files are converted via LibreOffice headless, or rendered as text images via xlrd
+3. **ZIP** archives are extracted and each file inside is processed recursively
+4. **All pages of a document are sent together** in a single API call so the model produces one unified JSON per filing
+5. Output schema: `document_type`, `issuer`, `dates`, `parties`, `amounts`, `key_terms`, `summary`, `raw_text`
+
+### Model Choice
+
+Tested `qwen3-vl:235b-instruct` vs `qwen3.5:397b` on real CNBV filings. Both extracted Spanish financial/legal text accurately. Chose qwen3.5 based on superior OCR benchmark scores (OCRBench: 93.1 vs 87.5, OmniDocBench: 90.8 vs 84.5). `glm-ocr` (0.9B) was not available on Ollama Cloud.
+
+## Production Considerations & Limitations
+
+- **Rate limiting**: Azure WAF throttles rapid requests. 1-second delay between requests is enforced.
+- **Download speed**: Sequential downloads at ~1 filing/second. An extension would explore parallelizing with `ThreadPoolExecutor` using a connection pool, while respecting rate limits to avoid overwhelming the CNBV portal.
+- **OCR throughput**: ~30 seconds per document via Ollama Cloud. Could be parallelized with multiple API calls.
+- **Retry logic**: Would benefit from exponential backoff for 403/5xx responses.
+- **Scale**: ~14,000 filings x 3 requests each (enc + detail + download) = ~42,000 requests. At 1 req/sec, full scrape takes ~12 hours. OCR adds ~30s/doc.
 
 ## Tech Stack
 
 - Python 3.10+
-- `requests` — HTTP client
-- `beautifulsoup4` — HTML parsing
-- No headless browsers (Selenium/Playwright/Puppeteer)
+- `requests` + `beautifulsoup4` — HTTP scraping (no headless browsers)
+- `pdf2image` + `poppler-utils` — PDF to image conversion
+- `xlrd` — XLS fallback rendering
+- `ollama` — Ollama Cloud SDK for OCR via Qwen3.5-397B
 
 ## Project Structure
 
 ```
-scraper.py          # Main scraper script (production code)
-filings.json        # Output: structured filing data (generated)
+scraper.py          # Scraper: filings table + document downloads
+extract_text.py     # OCR: structured JSON extraction from documents
+filings.json        # Output: filing metadata (generated)
+extracted_text.json # Output: OCR-extracted structured JSON (generated)
 pdfs/               # Output: downloaded documents (generated)
 README.md           # This file
-_investigation/     # Reverse-engineering scripts (not committed)
 ```
