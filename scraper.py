@@ -109,6 +109,18 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(". ")
 
 
+def parse_enc_from_dx_response(text: str) -> str | None:
+    """Extract enc= value from a DevExpress /*DX*/ callback response."""
+    dx_idx = text.find("/*DX*/")
+    if dx_idx < 0:
+        return None
+    payload = text[dx_idx + 6:]
+    # Unescape JS string literals
+    payload = payload.replace("\\'", "'").replace("\\r\\n", "\n").replace("\\/", "/")
+    match = re.search(r"enc=([^&\"'\s>\\]+)", payload)
+    return match.group(1) if match else None
+
+
 # ---------------------------------------------------------------------------
 # Enc cache (SQLite)
 # ---------------------------------------------------------------------------
@@ -512,63 +524,34 @@ class CNBVScraper:
             PAGE_URL, data=cb_data, headers=cb_headers, timeout=30
         )
 
-        # Parse DevExpress response: N|<viewstate>/*DX*/({...})
-        dx_idx = resp.text.find("/*DX*/")
-        if dx_idx < 0:
-            log.warning("No /*DX*/ marker in callbackPanel response for key=%s", key)
-            return None
-
-        payload = resp.text[dx_idx + 6:]
-        if payload.startswith("(") and payload.endswith(")"):
-            payload = payload[1:-1]
-
-        # Check for error
-        err_match = re.search(
-            r"'message'\s*:\s*'((?:[^'\\]|\\.)*)'", payload, re.DOTALL
-        )
-        if err_match:
-            err_msg = err_match.group(1).replace("\\r\\n", " ").replace("\\'", "'")
-            log.warning("Server error for key=%s: %s", key, err_msg[:100])
-
-        # Look for enc value in the result HTML
-        res_match = re.search(
-            r"'result'\s*:\s*'((?:[^'\\]|\\.)*)'", payload, re.DOTALL
-        )
-        if res_match:
-            html = (
-                res_match.group(1)
-                .replace("\\'", "'")
-                .replace("\\r\\n", "\n")
-                .replace("\\/", "/")
-            )
-            enc_match = re.search(r"enc=([^&\"'\s>]+)", html)
-            if enc_match:
-                enc_val = enc_match.group(1)
-                self.cache.put(int(key), enc_val)
-                return enc_val
-
-        return None
+        enc_val = parse_enc_from_dx_response(resp.text)
+        if enc_val:
+            self.cache.put(int(key), enc_val)
+        else:
+            log.debug("No enc in callback response for key=%s", key)
+        return enc_val
 
     # ----- Step 4: Download PDF from Detalle.aspx -----
 
-    def download_pdf_with_enc(self, enc: str, filename_hint: str = "") -> str | None:
+    def download_pdf_with_enc(
+        self, enc: str, filename_hint: str = "", session_override: requests.Session | None = None
+    ) -> str | None:
         """
-        Download a PDF from Detalle.aspx using the encrypted enc parameter.
-
-        This is the working implementation — tested and confirmed functional
-        when a valid enc value is available.
+        Download a file from Detalle.aspx using the encrypted enc parameter.
 
         Args:
             enc: The encrypted filing identifier (Base64-encoded AES block).
             filename_hint: Optional hint for the output filename.
+            session_override: Use a different session (for parallel workers).
 
         Returns:
-            Path to the downloaded PDF, or None on failure.
+            Path to the downloaded file, or None on failure.
         """
+        s = session_override or self.session
         detail_url = f"{DETALLE_URL}?enc={enc}"
 
         # Step 1: GET the detail page to extract hidden fields
-        resp1 = self.session.get(detail_url, headers=BROWSER_HEADERS, timeout=30)
+        resp1 = s.get(detail_url, headers=BROWSER_HEADERS, timeout=30)
         if resp1.status_code != 200:
             log.warning("Detalle.aspx GET failed: status=%d", resp1.status_code)
             return None
@@ -596,7 +579,7 @@ class CNBVScraper:
             "__EVENTARGUMENT": "",
         }
 
-        resp2 = self.session.post(
+        resp2 = s.post(
             detail_url,
             data=post_data,
             headers={
@@ -675,52 +658,10 @@ class CNBVScraper:
         """Download a single file using a fresh session (thread-safe)."""
         worker_session = requests.Session()
         worker_session.verify = False
-        detail_url = f"{DETALLE_URL}?enc={enc}"
-
         try:
-            resp1 = worker_session.get(detail_url, headers=BROWSER_HEADERS, timeout=30)
-            if resp1.status_code != 200:
-                return None
-            soup = BeautifulSoup(resp1.text, "html.parser")
-            title = soup.find("title")
-            if title and "Error" in title.get_text():
-                return None
-
-            hidden = extract_hidden_fields(soup)
-            page_text = soup.get_text()
-            archivo_match = re.search(r"Archivo adjunto:\s*(.+?)(?:\n|$)", page_text)
-            attached_name = archivo_match.group(1).strip() if archivo_match else filename_hint
-
-            post_data = {**hidden, "__EVENTTARGET": "DataViewContenido$DescargaArchivo", "__EVENTARGUMENT": ""}
-            resp2 = worker_session.post(
-                detail_url, data=post_data,
-                headers={**BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded", "Referer": detail_url},
-                timeout=60,
+            return self.download_pdf_with_enc(
+                enc, filename_hint=filename_hint, session_override=worker_session
             )
-
-            content_type = resp2.headers.get("Content-Type", "")
-            is_pdf = "pdf" in content_type.lower() or resp2.content[:4] == b"%PDF"
-            is_file = "application/" in content_type and "html" not in content_type.lower()
-            if not is_pdf and not is_file:
-                return None
-
-            content_disp = resp2.headers.get("Content-Disposition", "")
-            disp_match = re.search(r"filename=(.+?)(?:;|$)", content_disp)
-            if disp_match:
-                file_name = requests.utils.unquote(disp_match.group(1).strip("\"' "))
-            else:
-                file_name = sanitize_filename(attached_name)
-                if not any(file_name.lower().endswith(ext) for ext in (".pdf", ".xls", ".xlsx", ".doc", ".docx", ".zip")):
-                    file_name += ".pdf" if is_pdf else ".bin"
-
-            os.makedirs(self.pdf_dir, exist_ok=True)
-            file_path = os.path.join(self.pdf_dir, sanitize_filename(file_name))
-            with open(file_path, "wb") as f:
-                f.write(resp2.content)
-            return file_path
-        except Exception as e:
-            log.warning("Download worker error: %s", e)
-            return None
         finally:
             worker_session.close()
 
@@ -800,14 +741,7 @@ class CNBVScraper:
                         headers=cb_headers,
                         timeout=30,
                     )
-                    dx_idx = cb.text.find("/*DX*/")
-                    if dx_idx < 0:
-                        results.append((key, None))
-                        continue
-                    payload = cb.text[dx_idx + 6:]
-                    payload_clean = payload.replace("\\'", "'").replace("\\r\\n", "\n").replace("\\/", "/")
-                    m = re.search(r"enc=([^&\"'\s>\\]+)", payload_clean)
-                    results.append((key, m.group(1) if m else None))
+                    results.append((key, parse_enc_from_dx_response(cb.text)))
                 except Exception:
                     results.append((key, None))
         except Exception:

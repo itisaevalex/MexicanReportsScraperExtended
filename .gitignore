@@ -5,5 +5,5 @@ __pycache__/
 *.pyc
 *.png
 extracted_text.json
-enc_cache.db
+# enc_cache.db is included as a sample — gitignore only the large production ones
 stress_test_pdfs/
