@@ -1,0 +1,5 @@
+pdfs/
+filings.json
+_investigation/
+__pycache__/
+*.pyc
