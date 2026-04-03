@@ -102,8 +102,6 @@ Initial GET revealed the page structure: ASP.NET WebForms with a `ScriptManager`
 
 **Initial (wrong) conclusion:** I declared this a server-side bug and built the scraper without PDF support.
 
-**User correction:** "No, PDFs work. You gave up too early."
-
 **Investigation:** Launched Playwright browser automation to capture the actual network traffic when clicking a filing link. Compared the browser's XHR payload byte-for-byte with my Python request.
 
 **Discovery:** Using Playwright as a **one-time debugging tool** (not part of the scraper — the scraper uses only `requests`), I captured the browser's actual XHR payload. The DevExpress `ASPxClientCallbackPanel.PerformCallback(key)` JavaScript method **silently prepends `c0:` to the argument** before dispatching the XHR. The browser sends `__CALLBACKPARAM=c0:453884`, not `__CALLBACKPARAM=453884`. The server's C# handler does `parameter.Substring(2)` to strip this prefix — without it, the substring call on a shorter string throws the `ArgumentOutOfRangeException`.

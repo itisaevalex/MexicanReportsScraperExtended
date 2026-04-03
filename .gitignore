@@ -3,3 +3,5 @@ filings.json
 _investigation/
 __pycache__/
 *.pyc
+*.png
+extracted_text.json

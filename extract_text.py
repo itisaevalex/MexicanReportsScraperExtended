@@ -2,30 +2,21 @@
 OCR Text Extraction for CNBV Financial Filings
 ===============================================
 
-Extracts structured text from downloaded PDF/XLS filing documents using
-GLM-OCR on Ollama Cloud. Reads the filings.json produced by scraper.py
-and outputs extracted text for each document.
-
-Uses the GLM-OCR model (0.9B params, #1 ranked on OmniDocBench) which
-specializes in document understanding, table recognition, and formula
-extraction.
+Extracts structured JSON from downloaded filing documents (PDF, XLS, etc.)
+using Qwen3.5-397B vision model on Ollama Cloud. All pages of a document
+are sent together in a single request so the model produces one unified
+JSON per filing.
 
 Requirements:
-  pip install ollama pdf2image
+  pip install ollama pdf2image xlrd
   # poppler-utils must be installed: sudo apt-get install poppler-utils
 
-Setup (choose one):
-  Option A - Ollama Cloud API key:
-    export OLLAMA_API_KEY=your_key_from_ollama.com/settings/keys
-
-  Option B - Local Ollama with cloud sign-in:
-    curl -fsSL https://ollama.com/install.sh | sh
-    ollama signin
-    ollama pull glm-ocr
+Setup:
+  export OLLAMA_API_KEY=your_key_from_ollama.com/settings/keys
 
 Usage:
   python extract_text.py                          # Process all filings
-  python extract_text.py --pdf pdfs/report.pdf    # Process single file
+  python extract_text.py --file pdfs/report.pdf   # Process single file
   python extract_text.py --max-pages 3            # Limit pages per PDF
 """
 
@@ -37,6 +28,7 @@ import io
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -50,121 +42,215 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Ollama client setup
-# ---------------------------------------------------------------------------
+MODEL = "qwen3.5:397b"
 
-MODEL = "qwen3-vl:235b-instruct"
+EXTRACTION_PROMPT = (
+    "You are analyzing a Mexican financial regulatory filing (CNBV STIV-2). "
+    "All pages of this document are provided as images. "
+    "Extract ALL information into a single structured JSON object with these fields "
+    "(include only those present in the document):\n"
+    '- "document_type": type of document (e.g. "Acta de Asamblea", "Aviso de Suscripción", '
+    '"Informe Anual", "Calificación Crediticia", "Estados Financieros", "Composición de Cartera", etc.)\n'
+    '- "issuer": primary company/entity name\n'
+    '- "dates": object with relevant dates (e.g. {"filing_date": "...", "meeting_date": "...", "period": "..."})\n'
+    '- "parties": list of {{"name": "...", "role": "..."}} for all entities involved\n'
+    '- "amounts": list of {{"value": "...", "currency": "...", "description": "..."}} for monetary figures\n'
+    '- "key_terms": list of important identifiers (certificate numbers, fideicomiso IDs, ticker symbols, etc.)\n'
+    '- "summary": 3-5 sentence summary of the entire document\n'
+    '- "raw_text": the complete extracted text from all pages combined, preserving structure\n'
+    "Respond ONLY with valid JSON. No markdown fences, no explanation."
+)
+
+
+# ---------------------------------------------------------------------------
+# Ollama client
+# ---------------------------------------------------------------------------
 
 
 def create_ollama_client():
-    """Create an Ollama client, preferring cloud API key, falling back to local."""
+    """Create an Ollama client using cloud API key or local instance."""
     from ollama import Client
 
     api_key = os.environ.get("OLLAMA_API_KEY")
-
     if api_key:
         log.info("Using Ollama Cloud (API key set)")
         return Client(
             host="https://ollama.com",
             headers={"Authorization": f"Bearer {api_key}"},
         )
-
-    # Try local Ollama instance
     log.info("No OLLAMA_API_KEY set, trying local Ollama at localhost:11434")
     return Client(host="http://localhost:11434")
 
 
 def image_to_base64(pil_image) -> str:
     """Convert a PIL Image to a base64-encoded JPEG string."""
-    buffer = io.BytesIO()
-    pil_image.save(buffer, format="JPEG", quality=85)
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    buf = io.BytesIO()
+    pil_image.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def parse_json_response(text: str) -> dict:
+    """Parse a JSON response, stripping markdown fences if needed."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    clean = text.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+    if clean.endswith("```"):
+        clean = clean[:-3]
+    clean = clean.strip()
+    if clean.startswith("json"):
+        clean = clean[4:].strip()
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        return {"raw_text": text, "_parse_error": True}
 
 
 # ---------------------------------------------------------------------------
-# PDF text extraction
+# File → images conversion
 # ---------------------------------------------------------------------------
 
 
-def extract_text_from_pdf(
-    client,
-    pdf_path: str,
-    max_pages: int = 0,
-    dpi: int = 200,
-) -> list[dict]:
-    """
-    Extract text from a PDF using GLM-OCR via Ollama.
-
-    Args:
-        client: Ollama client instance.
-        pdf_path: Path to the PDF file.
-        max_pages: Max pages to process (0 = all).
-        dpi: Resolution for PDF-to-image conversion.
-
-    Returns:
-        List of dicts with 'page' and 'text' keys.
-    """
-    log.info("Converting %s to images (dpi=%d)...", pdf_path, dpi)
-
+def pdf_to_images(pdf_path: str, max_pages: int = 0, dpi: int = 200) -> list:
+    """Convert PDF pages to PIL images."""
     kwargs = {"pdf_path": pdf_path, "dpi": dpi, "fmt": "jpeg"}
     if max_pages > 0:
         kwargs["last_page"] = max_pages
+    return convert_from_path(**kwargs)
 
-    images = convert_from_path(**kwargs)
-    log.info("Converted %d page(s)", len(images))
 
-    results = []
-    for page_num, image in enumerate(images, 1):
-        log.info("  OCR page %d/%d...", page_num, len(images))
-
-        b64_image = image_to_base64(image)
-
-        response = client.chat(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": "Extract all text from this document page. Preserve the structure, tables, and formatting as much as possible.",
-                    "images": [b64_image],
-                }
-            ],
+def xls_to_images(xls_path: str) -> list:
+    """Convert XLS/XLSX to images via LibreOffice → PDF → images."""
+    tmp_dir = Path(xls_path).parent / "_tmp_convert"
+    tmp_dir.mkdir(exist_ok=True)
+    try:
+        # LibreOffice headless conversion to PDF
+        result = subprocess.run(
+            ["libreoffice", "--headless", "--convert-to", "pdf",
+             "--outdir", str(tmp_dir), xls_path],
+            capture_output=True, timeout=30,
         )
+        pdf_name = Path(xls_path).stem + ".pdf"
+        pdf_path = tmp_dir / pdf_name
+        if pdf_path.exists():
+            images = pdf_to_images(str(pdf_path), max_pages=5)
+            pdf_path.unlink()
+            return images
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    finally:
+        try:
+            tmp_dir.rmdir()
+        except OSError:
+            pass
 
-        text = response["message"]["content"]
-        results.append({"page": page_num, "text": text})
-        log.info("  Page %d: %d chars extracted", page_num, len(text))
-
-    return results
+    # Fallback: read with xlrd and render as text image
+    return _xls_to_text_images(xls_path)
 
 
-def extract_text_from_file(
-    client,
-    file_path: str,
-    max_pages: int = 0,
-) -> list[dict] | None:
-    """Extract text from a filing document (PDF or skip non-PDF)."""
+def _xls_to_text_images(xls_path: str) -> list:
+    """Fallback: render XLS data as a text image using PIL."""
+    try:
+        import xlrd
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        log.warning("xlrd or PIL not available for XLS rendering")
+        return []
+
+    try:
+        wb = xlrd.open_workbook(xls_path)
+    except Exception as e:
+        log.warning("Cannot open XLS %s: %s", xls_path, e)
+        return []
+
+    images = []
+    for sheet in wb.sheets():
+        lines = []
+        for row_idx in range(min(sheet.nrows, 60)):
+            cells = []
+            for col in range(sheet.ncols):
+                val = str(sheet.cell_value(row_idx, col)).strip()
+                cells.append(val[:25].ljust(25))
+            lines.append(" | ".join(cells))
+
+        text = f"Sheet: {sheet.name}\n" + "-" * 80 + "\n" + "\n".join(lines)
+
+        # Render to image
+        img = Image.new("RGB", (1600, max(400, len(lines) * 18 + 60)), "white")
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 13)
+        except (OSError, IOError):
+            font = ImageFont.load_default()
+        draw.text((10, 10), text, fill="black", font=font)
+        images.append(img)
+
+    return images
+
+
+def file_to_images(file_path: str, max_pages: int = 0) -> list:
+    """Convert any supported file type to a list of PIL images."""
     path = Path(file_path)
+    suffix = path.suffix.lower()
 
+    if suffix == ".pdf":
+        return pdf_to_images(file_path, max_pages=max_pages)
+    elif suffix in (".xls", ".xlsx"):
+        return xls_to_images(file_path)
+    elif suffix == ".zip":
+        log.info("Skipping ZIP: %s", path.name)
+        return []
+    else:
+        log.warning("Unsupported file type: %s", suffix)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# OCR extraction (all pages → one JSON)
+# ---------------------------------------------------------------------------
+
+
+def extract_filing(client, file_path: str, max_pages: int = 0) -> dict | None:
+    """
+    Extract structured JSON from a filing document.
+
+    All pages are sent together in a single request so the model
+    produces one unified JSON output per filing.
+    """
+    path = Path(file_path)
     if not path.exists():
         log.warning("File not found: %s", file_path)
         return None
 
-    suffix = path.suffix.lower()
-
-    if suffix == ".pdf":
-        return extract_text_from_pdf(client, str(path), max_pages=max_pages)
-
-    if suffix in (".xls", ".xlsx"):
-        log.info("Skipping spreadsheet (use pandas for XLS): %s", path.name)
+    images = file_to_images(file_path, max_pages=max_pages)
+    if not images:
         return None
 
-    log.warning("Unsupported file type: %s", suffix)
-    return None
+    log.info("  %d page(s) → sending to %s...", len(images), MODEL)
+    b64_images = [image_to_base64(img) for img in images]
+
+    response = client.chat(
+        model=MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": EXTRACTION_PROMPT,
+                "images": b64_images,
+            }
+        ],
+    )
+
+    text = response["message"]["content"]
+    parsed = parse_json_response(text)
+    log.info("  Extracted: %d chars, %d fields", len(text), len(parsed))
+    return parsed
 
 
 # ---------------------------------------------------------------------------
-# Batch processing from filings.json
+# Batch processing
 # ---------------------------------------------------------------------------
 
 
@@ -173,52 +259,46 @@ def process_filings(
     output_path: str = "extracted_text.json",
     max_pages: int = 0,
 ) -> None:
-    """Process all filings from the scraper output."""
+    """Process all filings from scraper output into structured JSON."""
     with open(filings_path, encoding="utf-8") as f:
         data = json.load(f)
 
     filings = data.get("filings", [])
-    pdf_filings = [f for f in filings if f.get("pdf_path", "").endswith(".pdf")]
-
-    log.info("Found %d PDF filings to process (out of %d total)", len(pdf_filings), len(filings))
+    processable = [f for f in filings if f.get("pdf_path") and not f["pdf_path"].endswith(".zip")]
+    log.info("Processing %d filings (%d total, skipping ZIPs)", len(processable), len(filings))
 
     client = create_ollama_client()
-
     results = []
-    for i, filing in enumerate(pdf_filings):
-        pdf_path = filing["pdf_path"]
+
+    for i, filing in enumerate(processable):
+        file_path = filing["pdf_path"]
         log.info(
             "[%d/%d] %s | %s | %s",
-            i + 1,
-            len(pdf_filings),
+            i + 1, len(processable),
             filing.get("emisora", "?"),
             filing.get("asunto", "?")[:40],
-            pdf_path,
+            Path(file_path).name,
         )
 
-        extracted = extract_text_from_file(client, pdf_path, max_pages=max_pages)
+        extracted = extract_filing(client, file_path, max_pages=max_pages)
         if extracted:
-            results.append(
-                {
-                    "filing": {
-                        "fecha": filing.get("fecha"),
-                        "emisora": filing.get("emisora"),
-                        "asunto": filing.get("asunto"),
-                        "key": filing.get("key"),
-                    },
-                    "source_file": pdf_path,
-                    "pages": extracted,
-                }
-            )
+            results.append({
+                "filing": {
+                    "fecha": filing.get("fecha"),
+                    "emisora": filing.get("emisora"),
+                    "asunto": filing.get("asunto"),
+                    "key": filing.get("key"),
+                },
+                "source_file": file_path,
+                "extracted": extracted,
+            })
 
-        time.sleep(0.5)  # Be polite to the API
+        time.sleep(0.5)
 
-    # Save results
     output = {
         "metadata": {
             "model": MODEL,
             "total_processed": len(results),
-            "total_pages_ocred": sum(len(r["pages"]) for r in results),
         },
         "documents": results,
     }
@@ -226,12 +306,7 @@ def process_filings(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    log.info("Extracted text saved to: %s", output_path)
-    log.info(
-        "Processed %d documents, %d total pages",
-        len(results),
-        sum(len(r["pages"]) for r in results),
-    )
+    log.info("Saved %d extracted documents to %s", len(results), output_path)
 
 
 # ---------------------------------------------------------------------------
@@ -241,46 +316,23 @@ def process_filings(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Extract text from CNBV filing PDFs using GLM-OCR on Ollama"
+        description="Extract structured JSON from CNBV filings via OCR (Ollama Cloud)"
     )
-    parser.add_argument(
-        "--pdf",
-        help="Process a single PDF file instead of filings.json",
-    )
-    parser.add_argument(
-        "--filings",
-        default="filings.json",
-        help="Path to filings.json from scraper.py (default: filings.json)",
-    )
-    parser.add_argument(
-        "--output",
-        default="extracted_text.json",
-        help="Output JSON file (default: extracted_text.json)",
-    )
-    parser.add_argument(
-        "--max-pages",
-        type=int,
-        default=0,
-        help="Max pages per PDF to OCR (0 = all, default: 0)",
-    )
+    parser.add_argument("--file", help="Process a single file (PDF/XLS)")
+    parser.add_argument("--filings", default="filings.json", help="filings.json from scraper.py")
+    parser.add_argument("--output", default="extracted_text.json", help="Output JSON file")
+    parser.add_argument("--max-pages", type=int, default=0, help="Max pages per document (0=all)")
     args = parser.parse_args()
 
-    if args.pdf:
-        # Single file mode
+    if args.file:
         client = create_ollama_client()
-        results = extract_text_from_file(client, args.pdf, max_pages=args.max_pages)
-        if results:
-            output = {"source": args.pdf, "pages": results}
+        result = extract_filing(client, args.file, max_pages=args.max_pages)
+        if result:
             with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(output, f, ensure_ascii=False, indent=2)
+                json.dump({"source": args.file, "extracted": result}, f, ensure_ascii=False, indent=2)
             log.info("Saved to %s", args.output)
     else:
-        # Batch mode from filings.json
-        process_filings(
-            filings_path=args.filings,
-            output_path=args.output,
-            max_pages=args.max_pages,
-        )
+        process_filings(args.filings, args.output, args.max_pages)
 
     return 0
 
