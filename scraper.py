@@ -588,6 +588,154 @@ class CNBVScraper:
         )
         return None
 
+    # ----- Monitor mode -----
+
+    def _load_state(self) -> dict:
+        """Load monitor state (last known key) from disk."""
+        state_file = os.path.join(os.path.dirname(self.output_path), ".monitor_state.json")
+        if os.path.exists(state_file):
+            with open(state_file, encoding="utf-8") as f:
+                return json.load(f)
+        return {"last_key": 0}
+
+    def _save_state(self, state: dict) -> None:
+        """Persist monitor state to disk."""
+        state_file = os.path.join(os.path.dirname(self.output_path) or ".", ".monitor_state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+
+    def probe_key(self, key: int) -> dict[str, Any] | None:
+        """
+        Check if a filing key exists by calling the callbackPanel directly.
+        No prior search needed — the callback is stateless.
+
+        Returns filing dict with enc value if the key exists, None otherwise.
+        """
+        enc = self.get_filing_enc(str(key))
+        if not enc:
+            return None
+
+        # Get filing metadata from the detail page
+        detail_url = f"{DETALLE_URL}?enc={enc}"
+        resp = self.session.get(detail_url, headers=BROWSER_HEADERS, timeout=30)
+        if resp.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        title = soup.find("title")
+        if title and "Error" in title.get_text():
+            return None
+
+        # Extract metadata from the detail page
+        page_text = soup.get_text()
+        emisora_match = re.search(r"Emisora:\s*(.+?)(?:\n|$)", page_text)
+        asunto_match = re.search(r"Asunto\s*:?\s*(.+?)(?:\n|$)", page_text)
+        fecha_match = re.search(r"Fecha de recepción.*?:\s*(.+?)(?:\n|$)", page_text)
+
+        return {
+            "key": str(key),
+            "enc": enc,
+            "emisora": emisora_match.group(1).strip() if emisora_match else "?",
+            "asunto": asunto_match.group(1).strip() if asunto_match else "?",
+            "fecha": fecha_match.group(1).strip() if fecha_match else "?",
+        }
+
+    def monitor(self, interval: int = 300, look_ahead: int = 5) -> None:
+        """
+        Monitor mode: poll for new filings by probing sequential keys.
+
+        Args:
+            interval: Seconds between poll cycles (default: 300 = 5 min).
+            look_ahead: How many keys ahead to probe per cycle (default: 5).
+        """
+        self.initialize()
+
+        state = self._load_state()
+        last_key = state["last_key"]
+
+        # If no state, do an initial search to find the current highest key
+        if last_key == 0:
+            log.info("No monitor state found — running initial search to find latest key...")
+            filings = self.search_filings(period="4", max_pages=0)  # Today
+            if not filings:
+                filings = self.search_filings(period="1", max_pages=0)  # Latest
+            if filings:
+                keys = [int(f["key"]) for f in filings if f.get("key")]
+                last_key = max(keys) if keys else 0
+                log.info("Latest key found: %d", last_key)
+                state["last_key"] = last_key
+                self._save_state(state)
+
+        log.info("=" * 60)
+        log.info("MONITOR MODE — watching for new filings")
+        log.info("  Last known key: %d", last_key)
+        log.info("  Poll interval: %ds", interval)
+        log.info("  Look-ahead: %d keys", look_ahead)
+        log.info("=" * 60)
+
+        try:
+            while True:
+                new_count = 0
+                for offset in range(1, look_ahead + 1):
+                    probe = last_key + offset
+                    log.debug("Probing key %d...", probe)
+
+                    filing = self.probe_key(probe)
+                    if not filing:
+                        continue
+
+                    # New filing found!
+                    new_count += 1
+                    last_key = probe
+                    log.info(
+                        "NEW FILING: key=%d | %s | %s",
+                        probe,
+                        filing["emisora"][:30],
+                        filing["asunto"][:40],
+                    )
+
+                    # Download document
+                    if self.download_docs:
+                        time.sleep(REQUEST_DELAY)
+                        pdf_path = self.download_pdf_with_enc(
+                            filing["enc"],
+                            filename_hint=f"{filing['emisora']}_{filing['asunto']}.pdf",
+                        )
+                        filing["pdf_path"] = pdf_path
+
+                    # Append to output file
+                    self._append_filing(filing)
+                    time.sleep(REQUEST_DELAY)
+
+                if new_count:
+                    state["last_key"] = last_key
+                    self._save_state(state)
+                    log.info("Processed %d new filing(s). Last key: %d", new_count, last_key)
+                else:
+                    log.info("No new filings. Last key: %d. Sleeping %ds...", last_key, interval)
+
+                time.sleep(interval)
+
+        except KeyboardInterrupt:
+            log.info("Monitor stopped by user. Last key: %d", last_key)
+            state["last_key"] = last_key
+            self._save_state(state)
+
+    def _append_filing(self, filing: dict) -> None:
+        """Append a single filing to the output JSON file."""
+        if os.path.exists(self.output_path):
+            with open(self.output_path, encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"metadata": {"source": PAGE_URL}, "filings": []}
+
+        data["filings"].append(filing)
+        data["metadata"]["last_updated"] = datetime.now().isoformat()
+        data["metadata"]["total_filings"] = len(data["filings"])
+
+        with open(self.output_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
     # ----- Main pipeline -----
 
     def run(self) -> None:
@@ -694,6 +842,17 @@ def main() -> int:
         action="store_true",
         help="Skip document downloads (extract metadata only)",
     )
+    parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Monitor mode: poll for new filings continuously",
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=300,
+        help="Monitor poll interval in seconds (default: 300)",
+    )
     args = parser.parse_args()
 
     max_pages = args.max_pages if args.max_pages >= 0 else 99999
@@ -704,7 +863,11 @@ def main() -> int:
         period=args.period,
         download_docs=not args.no_download,
     )
-    scraper.run()
+
+    if args.monitor:
+        scraper.monitor(interval=args.interval)
+    else:
+        scraper.run()
     return 0
 
 
