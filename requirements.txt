@@ -1,0 +1,8 @@
+# Core scraper
+requests>=2.28
+beautifulsoup4>=4.12
+
+# OCR extraction (optional — only needed for extract_text.py)
+pdf2image>=1.16
+ollama>=0.4
+xlrd>=2.0
