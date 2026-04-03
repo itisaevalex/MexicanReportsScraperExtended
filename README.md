@@ -1,42 +1,121 @@
-# CNBV STIV-2 Mexican Financial Filings Scraper
+<div align="center">
 
-Scrapes Mexico's regulatory financial filings portal (STIV-2) — the Mexican equivalent of SEC EDGAR — using raw HTTP requests. No headless browsers.
+```
+ ██████╗███╗   ██╗██████╗ ██╗   ██╗    ███████╗ ██████╗██████╗  █████╗ ██████╗ ███████╗██████╗
+██╔════╝████╗  ██║██╔══██╗██║   ██║    ██╔════╝██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗
+██║     ██╔██╗ ██║██████╔╝██║   ██║    ███████╗██║     ██████╔╝███████║██████╔╝█████╗  ██████╔╝
+██║     ██║╚██╗██║██╔══██╗╚██╗ ██╔╝    ╚════██║██║     ██╔══██╗██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗
+╚██████╗██║ ╚████║██████╔╝ ╚████╔╝     ███████║╚██████╗██║  ██║██║  ██║██║     ███████╗██║  ██║
+ ╚═════╝╚═╝  ╚═══╝╚═════╝   ╚═══╝      ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝
+```
+
+**Mexico's EDGAR — scraped with raw HTTP requests. No headless browsers.**
+
+*454K filings since 2009 · Parallel downloads · OCR extraction · Real-time monitoring*
+
+</div>
+
+---
 
 **Portal:** https://stivconsultasexternas.cnbv.gob.mx/ConsultaInformacionEmisoras.aspx
 
 ## What It Does
 
-1. **Scrapes** the filings table with full pagination support (~14,000 filings available)
+1. **Scrapes** the filings table with full pagination (~454K filings available, 2009–present)
 2. **Extracts** structured data (Date, Emisora/Issuer, Asunto/Event) into JSON
-3. **Downloads** the attached documents (PDFs, XLS, etc.) for each filing
+3. **Downloads** attached documents (PDFs, XLS, ZIPs) in parallel
+4. **Caches** encrypted download tokens to SQLite for instant repeat access
+5. **Monitors** for new filings in real-time via sequential key probing
+6. **OCR extracts** structured JSON from documents via Ollama Cloud (Qwen3.5-397B)
 
-## Quick Start
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- `poppler-utils` (for PDF→image conversion in OCR)
 
 ```bash
-pip install requests beautifulsoup4
-python scraper.py
+# Ubuntu/Debian
+sudo apt-get install poppler-utils
+
+# macOS
+brew install poppler
 ```
 
-Output:
-- `filings.json` — structured filing data
-- `pdfs/` — downloaded documents
-
-### CLI Options
+### Installation
 
 ```bash
-# Default: first page (20 filings) + download documents
+git clone git@github.com:itisaevalex/MexicanReportsScraperExtended.git
+cd MexicanReportsScraperExtended
+pip install -r requirements.txt
+```
+
+### 1. Scrape filings + download documents
+
+```bash
+# First page (20 filings) — works out of the box
 python scraper.py
 
-# Scrape 10 pages (200 filings) with downloads
+# Multiple pages
 python scraper.py --max-pages 10
 
-# All filings, metadata only (no document downloads)
-python scraper.py --max-pages -1 --no-download
+# Parallel downloads (5 workers)
+python scraper.py --parallel 5
+```
 
-# Custom output paths and period filter
-python scraper.py --output results.json --pdf-dir documents/ --period 0
+Output: `filings.json` + `pdfs/` directory with downloaded documents.
 
-# Period options: 0=All, 1=Latest, 2=Last 6 months (default), 3=This year, 4=Today
+### 2. Build the enc cache (optional, enables instant downloads)
+
+```bash
+# Cache enc values for a range of filing keys
+python scraper.py --build-cache --start-key 450000 --end-key 453884 --parallel 50
+
+# After caching, downloads skip the callback step entirely
+python scraper.py --parallel 5  # all cache hits
+```
+
+A sample cache (`enc_cache.db`, 58 keys) is included in the repo.
+
+### 3. Monitor for new filings
+
+```bash
+# Watch for new filings, download as they appear
+python scraper.py --monitor --interval 300
+
+# Start from a specific key
+python scraper.py --monitor --start-key 453884
+```
+
+### 4. OCR extraction (requires Ollama Cloud)
+
+```bash
+export OLLAMA_API_KEY=your_key_from_ollama.com/settings/keys
+
+# Extract structured JSON from all downloaded PDFs
+python extract_text.py
+
+# Single file
+python extract_text.py --file pdfs/report.pdf --max-pages 3
+```
+
+### CLI Reference
+
+```bash
+python scraper.py [OPTIONS]
+
+  --output FILE        Output JSON path (default: filings.json)
+  --pdf-dir DIR        Download directory (default: pdfs/)
+  --max-pages N        Pages to scrape: 0=first only, -1=all (default: 0)
+  --period P           Filter: 0=All, 1=Latest, 2=Last 6mo, 3=Year, 4=Today
+  --parallel N         Download workers (default: 1)
+  --no-download        Metadata only, skip document downloads
+  --build-cache        Build enc cache for a key range
+  --start-key N        Start key for cache/monitor
+  --end-key N          End key for cache builder
+  --monitor            Real-time filing detection mode
+  --interval N         Monitor poll interval in seconds (default: 300)
 ```
 
 ## Technical Approach
