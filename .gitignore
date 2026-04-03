@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 *.png
 extracted_text.json
+enc_cache.db
+stress_test_pdfs/

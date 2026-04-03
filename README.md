@@ -149,13 +149,57 @@ python extract_text.py --max-pages 3          # Limit pages per doc
 
 Tested `qwen3-vl:235b-instruct` vs `qwen3.5:397b` on real CNBV filings. Both extracted Spanish financial/legal text accurately. Chose qwen3.5 based on superior OCR benchmark scores (OCRBench: 93.1 vs 87.5, OmniDocBench: 90.8 vs 84.5). `glm-ocr` (0.9B) was not available on Ollama Cloud.
 
-## Production Considerations & Limitations
+## Enc Cache & Parallel Architecture
 
-- **Rate limiting**: Azure WAF throttles rapid requests. 1-second delay between requests is enforced.
-- **Download speed**: Sequential downloads at ~1 filing/second. An extension would explore parallelizing with `ThreadPoolExecutor` using a connection pool, while respecting rate limits to avoid overwhelming the CNBV portal.
+The scraper includes a **SQLite enc cache** (`enc_cache.db`) that eliminates repeated callback requests. The `enc` values (encrypted filing identifiers for `Detalle.aspx`) are deterministic and permanent — once resolved, they never change. The cache enables:
+
+```bash
+# Build cache for a range of keys (one-time)
+python scraper.py --build-cache --start-key 440000 --end-key 453884 --parallel 50
+
+# Download any filing instantly (cache hit = 0 callbacks)
+python scraper.py --parallel 5
+
+# Monitor auto-caches new filings as they appear
+python scraper.py --monitor --interval 300
+```
+
+### ViewState Reuse Discovery
+
+Each enc resolution requires a `WebForm_DoCallback` POST with a valid ASP.NET `__VIEWSTATE`. Initially, each worker did a fresh GET per key (2 requests/key). We discovered that **the ViewState never expires** — one GET enables unlimited callbacks on the same session. Workers now do 1 GET, then stream callbacks indefinitely:
+
+```
+Before: 50 workers × (1 GET + 1 callback)/key = 2.6 keys/sec
+After:  50 workers × 1 GET once + N callbacks  = 20-65 keys/sec
+```
+
+### Stress Test Results (15-minute run)
+
+| Phase | Duration | Result | Rate |
+|-------|----------|--------|------|
+| Enc caching (50 workers) | 10 min | **11,983 keys cached** | 20-65/sec (peaked at 65/sec) |
+| File downloads (10 workers) | 2.75 min | **497 files, 588.7 MB** | 3 files/sec, 99.4% success |
+
+Extrapolated: the full 454K filing database (2009–present) is cacheable in **~2-6 hours**. After caching, every filing downloads in <1 second.
+
+### Server Capacity Limits
+
+The bottleneck is the CNBV backend server's connection pool, **not** WAF/IP-based rate limiting:
+
+| Concurrent connections | Behavior |
+|----------------------|----------|
+| 50 | Stable, 20-65 keys/sec, no errors |
+| 75 | Works but ~20% timeouts |
+| 100+ | Connection pool exhaustion, mass timeouts |
+| 1000 | Server returns 502 Bad Gateway (recovers in ~1 min) |
+
+Proxies would not help — the server itself can't handle >75 concurrent TCP connections regardless of source IP. 50 workers is the sweet spot.
+
+## Production Considerations
+
 - **OCR throughput**: ~30 seconds per document via Ollama Cloud. Could be parallelized with multiple API calls.
-- **Retry logic**: Would benefit from exponential backoff for 403/5xx responses.
-- **Scale**: ~14,000 filings x 3 requests each (enc + detail + download) = ~42,000 requests. At 1 req/sec, full scrape takes ~12 hours. OCR adds ~30s/doc.
+- **Retry logic**: Cache builder is self-healing — re-run fills gaps from previous failures (~10% per pass).
+- **Storage**: Full 454K filing download estimated at ~500GB+ of PDFs/XLS.
 
 ## Tech Stack
 
