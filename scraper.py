@@ -5,9 +5,9 @@ CNBV STIV-2 Mexican Financial Filings Scraper
 Scrapes the Mexican regulatory database (STIV-2) at:
   https://stivconsultasexternas.cnbv.gob.mx/ConsultaInformacionEmisoras.aspx
 
-Extracts the first page of the latest filings table (Date, Emisora/Issuer,
-Asunto/Event) into a structured JSON file, and downloads the associated PDF
-documents for each filing.
+Extracts the filings table (Date, Emisora/Issuer, Asunto/Event) into a
+structured JSON file, and downloads the associated PDF/XLS documents for
+each filing. Supports full pagination across all result pages.
 
 Architecture:
   - Uses raw HTTP requests (requests + BeautifulSoup) — no headless browsers.

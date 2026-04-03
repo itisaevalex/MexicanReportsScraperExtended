@@ -6,9 +6,9 @@ Scrapes Mexico's regulatory financial filings portal (STIV-2) — the Mexican eq
 
 ## What It Does
 
-1. **Scrapes** the first page of the latest filings table
+1. **Scrapes** the filings table with full pagination support (~14,000 filings available)
 2. **Extracts** structured data (Date, Emisora/Issuer, Asunto/Event) into JSON
-3. **Downloads** the attached PDF/document for each filing
+3. **Downloads** the attached documents (PDFs, XLS, etc.) for each filing
 
 ## Quick Start
 
@@ -19,76 +19,121 @@ python scraper.py
 
 Output:
 - `filings.json` — structured filing data
-- `pdfs/` — downloaded documents (PDFs, XLS, etc.)
+- `pdfs/` — downloaded documents
 
-### Options
+### CLI Options
 
 ```bash
-python scraper.py --output results.json --pdf-dir documents/
+# Default: first page (20 filings) + download documents
+python scraper.py
+
+# Scrape 10 pages (200 filings) with downloads
+python scraper.py --max-pages 10
+
+# All filings, metadata only (no document downloads)
+python scraper.py --max-pages -1 --no-download
+
+# Custom output paths and period filter
+python scraper.py --output results.json --pdf-dir documents/ --period 0
+
+# Period options: 0=All, 1=Latest, 2=Last 6 months (default), 3=This year, 4=Today
 ```
 
-## Approach & How It Works
+## Technical Approach
 
-The CNBV portal is an ASP.NET WebForms application with DevExpress controls, fronted by an Azure Application Gateway WAF. Reverse-engineering it required understanding three distinct protocols:
+The CNBV portal is an ASP.NET WebForms application with DevExpress controls, fronted by an Azure Application Gateway WAF. It required reverse-engineering three distinct protocols to scrape.
 
 ### 1. Session & WAF Bypass
 
-The Azure WAF blocks requests without proper browser headers. The scraper sets a Chrome User-Agent and standard browser Accept/Language headers to establish a session (`ASP.NET_SessionId` cookie).
+The Azure WAF returns 403 for requests without browser-like headers. The scraper sets a Chrome User-Agent and Accept/Language headers to establish an `ASP.NET_SessionId` session cookie.
 
-### 2. Search — ASP.NET Synchronous Form POST
+### 2. Search — ASP.NET Async Postback
 
-The search is triggered by a synchronous form POST that includes:
-- All hidden fields from the initial GET (`__VIEWSTATE`, `__EVENTVALIDATION`, `_TSM_HiddenField_`, plus ~17 DevExpress widget-state fields)
-- The `ctl00$DefaultPlaceholder$BotonBuscar` submit button as a form field (with `__EVENTTARGET` left empty — this is critical)
-- `ComboPeriodo=2` (last 6 months) and date fields with DevExpress epoch-millisecond Raw values
+The search uses an **async postback** (not a sync form POST — this distinction matters for pagination):
+- ScriptManager target: `UpdatePanelBusqueda|BotonBuscar`
+- Headers: `X-MicrosoftAjax: Delta=true`, `X-Requested-With: XMLHttpRequest`
+- The response is a pipe-delimited delta format containing updated `__VIEWSTATE`, `__EVENTVALIDATION`, and the results grid HTML
 
-The server returns a full HTML page. Filing data is in a DevExpress GridView (`dxgvDataRow` CSS class) with three columns: Fecha, Emisora, Asunto. Each Asunto cell contains `<a onclick="callbackPanel.PerformCallback(NUMERIC_KEY)">`.
+Filing data is in a DevExpress GridView with `dxgvDataRow` CSS class rows. Each row has 3 cells: Fecha, Emisora, Asunto. The Asunto cell contains `<a onclick="callbackPanel.PerformCallback(NUMERIC_KEY)">`.
 
-### 3. PDF Download — Three-Step DevExpress Callback Chain
+### 3. Pagination — DevExpress GridView Callback
 
-This was the hardest part. Each filing's document is behind an encrypted URL (`Detalle.aspx?enc=<AES-128 Base64 blob>`). Getting the `enc` value requires:
+The GridView paginates via `WebForm_DoCallback` with a precisely formatted `__CALLBACKPARAM`:
 
-**Step A:** POST a `WebForm_DoCallback` to the page with:
-- `__CALLBACKID = ctl00$DefaultPlaceholder$callbackPanel`
-- `__CALLBACKPARAM = c0:<numeric_key>` (the `c0:` prefix is critical — see below)
+```
+c0:KV|181;['453884','453882',...];GB|20;12|PAGERONCLICK3|PN1;
+```
 
-**Step B:** Parse the DevExpress response (`N|<ViewState>/*DX*/({result:'<HTML>'})`) to extract the `enc` value from the popup HTML fragment.
+Format: `c0:` prefix + `KV|<len>;<keys_array>;` + `GB|<page_size>;` + `12|PAGERONCLICK3|PN<page_index>;`
 
-**Step C:** GET `Detalle.aspx?enc=<value>`, extract hidden fields, then POST with `__EVENTTARGET=DataViewContenido$DescargaArchivo` to trigger the file download.
+The `12` is `len("PAGERONCLICK")` — **not** the length of the full action string. The search form fields must also be included in every pagination POST for the server to maintain query context.
 
-### The `c0:` Prefix Discovery
+### 4. PDF Download — Three-Step Callback Chain
 
-The DevExpress `ASPxClientCallbackPanel.PerformCallback(key)` JavaScript method silently prepends `c0:` to the argument before dispatching the XHR. This was discovered via Playwright browser-level network interception. Without it, the server's C# handler calls `Substring(2)` on the raw key string, hits index 0, and throws:
+Each filing's document is behind an encrypted URL (`Detalle.aspx?enc=<AES-128 Base64>`). The flow:
 
-> "Length cannot be less than zero. Parameter name: length"
+1. **Get enc value:** POST `__CALLBACKID=ctl00$DefaultPlaceholder$callbackPanel` with `__CALLBACKPARAM=c0:<numeric_key>`. Parse the DevExpress `/*DX*/` response to extract the `enc=` value from the popup HTML fragment.
+2. **Get detail page:** GET `Detalle.aspx?enc=<value>` to extract hidden fields.
+3. **Download file:** POST with `__EVENTTARGET=DataViewContenido$DescargaArchivo` to trigger the binary download.
 
-The fix: `__CALLBACKPARAM = "c0:453884"` instead of just `"453884"`.
+## Reverse-Engineering Journey
 
-## Pagination Architecture
+This section documents the investigation process and the roadblocks encountered, since the ASPX portal was deliberately chosen as a tricky target.
 
-The scraper currently extracts only the first page (20 results). Here's how I would architect full pagination:
+### Phase 1: Page Analysis
 
-### Server-Side Pagination via DevExpress GridView
+Initial GET revealed the page structure: ASP.NET WebForms with a `ScriptManager`, four `UpdatePanel`s (Periodo, Desde, Busqueda, Resultados), and DevExpress controls (`ASPxClientButton`, `ASPxClientCallbackPanel`, `ASPxClientPopupControl`, `ASPxClientDateEdit`, `ASPxClientComboBox`). 17 DevExpress client objects total.
 
-The DevExpress GridView supports server-side pagination through callback postbacks. The grid header contains page navigation controls. To paginate:
+### Phase 2: Getting the Search to Return Results
 
-1. **Async Postback**: After the initial search, send an ASP.NET ScriptManager async postback with:
-   - `ctl00$DefaultPlaceholder$ScriptManager1 = ctl00$DefaultPlaceholder$UpdatePanelResultados|<page_control_id>`
-   - `__EVENTTARGET = <GridView pager control>`
-   - `__EVENTARGUMENT = <page number>`
-   - Updated `__VIEWSTATE` from the previous response
+**Roadblock:** Initial sync POST with `__EVENTTARGET=BotonBuscar` returned the page with an empty results panel.
 
-2. **Delta Response Parsing**: The async response uses the ASP.NET pipe-delimited delta format (`LENGTH|updatePanel|ID|CONTENT|`). Parse segments to extract the new `UpdatePanelResultados` HTML and updated `__VIEWSTATE`/`__EVENTVALIDATION`.
+**Investigation:** Launched 4 parallel investigation branches testing different hypotheses:
+- Different ScriptManager targets (`UpdatePanelResultados` vs `UpdatePanelBusqueda`)
+- Different `__EVENTTARGET` / `__EVENTARGUMENT` values
+- Two-step postback chains (period selection → search)
+- DevExpress callback vs ASP.NET postback mechanisms
 
-3. **Alternative — Increase Page Size**: The simpler approach is to change `ComboFiltroPersonalizado` to `100` or "Ver todos" (view all) to get more results per page, reducing the need for pagination.
+**Resolution:** For a sync POST, `__EVENTTARGET` must be **empty** and the button appears as a separate form field (`ctl00$DefaultPlaceholder$BotonBuscar=""`). For async postback, the ScriptManager target determines which panels update. Using `ComboPeriodo=2` (last 6 months) instead of `0` (Todos) was also needed to get results with the default date range.
 
-### Production Considerations
+### Phase 3: The `c0:` Prefix Discovery
 
-- **Rate limiting**: The Azure WAF throttles rapid requests. Use 1-2 second delays between requests.
-- **Parallelism**: PDF downloads can be parallelized with `concurrent.futures.ThreadPoolExecutor` (each uses its own session with shared cookies).
+**Roadblock:** The callbackPanel callback (needed to get the `enc` value for PDF downloads) returned a .NET exception: *"Length cannot be less than zero. Parameter name: length"* — for every filing key.
+
+**Initial (wrong) conclusion:** I declared this a server-side bug and built the scraper without PDF support.
+
+**User correction:** "No, PDFs work. You gave up too early."
+
+**Investigation:** Launched Playwright browser automation to capture the actual network traffic when clicking a filing link. Compared the browser's XHR payload byte-for-byte with my Python request.
+
+**Discovery:** The DevExpress `ASPxClientCallbackPanel.PerformCallback(key)` JavaScript method **silently prepends `c0:` to the argument** before dispatching the XHR. The browser sends `__CALLBACKPARAM=c0:453884`, not `__CALLBACKPARAM=453884`. The server's C# handler does `parameter.Substring(2)` to strip this prefix — without it, the substring call on a shorter string throws the `ArgumentOutOfRangeException`.
+
+**Fix:** One line change: `f"c0:{key}"` instead of `key`.
+
+### Phase 4: Pagination
+
+**Roadblock:** GridView pagination callbacks (`__CALLBACKID=GridViewResultados`, `__CALLBACKPARAM=PN2`) always returned page 1 data.
+
+**Investigation:** Again used Playwright to capture the exact browser payload when clicking page 2.
+
+**Discovery:** Two issues:
+1. The GridView callback parameter has a complex format: `c0:KV|<len>;[<current_keys>];GB|<page_size>;12|PAGERONCLICK3|PN<index>;` — the `12` is the length of the string `"PAGERONCLICK"`, not of the full action.
+2. The search **must use async postback** (not sync POST) for the resulting ViewState to correctly support GridView pagination callbacks. The sync POST ViewState lacks the grid's internal state.
+
+### Summary of Key Lessons
+
+| Roadblock | Root Cause | Discovery Method |
+|-----------|-----------|-----------------|
+| Empty results panel | Wrong `__EVENTTARGET` for button submit | Parallel hypothesis testing |
+| "Length cannot be less than zero" | Missing `c0:` prefix on callbacks | Playwright network capture |
+| Pagination returns page 1 | Action length field + sync vs async ViewState | Playwright + byte comparison |
+
+## Production Considerations
+
+- **Rate limiting**: Azure WAF throttles rapid requests. 1-second delay between requests.
+- **Parallelism**: PDF downloads can be parallelized with `ThreadPoolExecutor`.
 - **Retry logic**: Add exponential backoff for 403/5xx responses.
-- **ViewState management**: Each postback returns updated ViewState. Chain requests sequentially to maintain state consistency.
-- **Monitoring**: Log enc values and filing keys for debugging. The `enc` values are deterministic (same key always produces the same enc) and don't expire.
+- **Scale**: ~14,000 filings × 3 requests each (enc + detail + download) = ~42,000 requests. At 1 req/sec, full scrape takes ~12 hours.
 
 ## Tech Stack
 
@@ -100,9 +145,9 @@ The DevExpress GridView supports server-side pagination through callback postbac
 ## Project Structure
 
 ```
-scraper.py          # Main scraper script
-filings.json        # Output: structured filing data
-pdfs/               # Output: downloaded documents
+scraper.py          # Main scraper script (production code)
+filings.json        # Output: structured filing data (generated)
+pdfs/               # Output: downloaded documents (generated)
 README.md           # This file
-_investigation/     # Reverse-engineering scripts (not needed to run)
+_investigation/     # Reverse-engineering scripts (not committed)
 ```
