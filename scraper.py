@@ -763,43 +763,58 @@ class CNBVScraper:
 
     # ----- Bulk enc cache builder -----
 
-    def _resolve_enc_worker(self, key: int) -> tuple[int, str | None]:
-        """Resolve enc for a single key using a fresh session (thread-safe)."""
+    @staticmethod
+    def _resolve_enc_batch(keys: list[int]) -> list[tuple[int, str | None]]:
+        """
+        Resolve enc for a batch of keys using ONE session (thread-safe).
+
+        ViewState is reused across all callbacks in the batch — only 1 GET
+        for N callbacks instead of N GETs + N callbacks. 2x throughput.
+        """
+        results = []
         worker_session = requests.Session()
         worker_session.verify = False
         try:
+            # One GET to establish session + ViewState
             r = worker_session.get(PAGE_URL, headers=BROWSER_HEADERS, timeout=30)
+            if r.status_code != 200:
+                return [(k, None) for k in keys]
             hidden = extract_hidden_fields(BeautifulSoup(r.text, "html.parser"))
 
-            cb = worker_session.post(
-                PAGE_URL,
-                data={
-                    **hidden,
-                    "__CALLBACKID": "ctl00$DefaultPlaceholder$callbackPanel",
-                    "__CALLBACKPARAM": f"c0:{key}",
-                },
-                headers={
-                    **BROWSER_HEADERS,
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Referer": PAGE_URL,
-                },
-                timeout=30,
-            )
+            cb_headers = {
+                **BROWSER_HEADERS,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": PAGE_URL,
+            }
 
-            dx_idx = cb.text.find("/*DX*/")
-            if dx_idx < 0:
-                return key, None
-            payload = cb.text[dx_idx + 6:]
-            # Unescape the JS string first (same as get_filing_enc does)
-            payload_clean = payload.replace("\\'", "'").replace("\\r\\n", "\n").replace("\\/", "/")
-            m = re.search(r"enc=([^&\"'\s>\\]+)", payload_clean)
-            return key, m.group(1) if m else None
-        except Exception as e:
-            log.debug("Worker error for key %d: %s", key, e)
-            return key, None
+            for key in keys:
+                try:
+                    cb = worker_session.post(
+                        PAGE_URL,
+                        data={
+                            **hidden,
+                            "__CALLBACKID": "ctl00$DefaultPlaceholder$callbackPanel",
+                            "__CALLBACKPARAM": f"c0:{key}",
+                        },
+                        headers=cb_headers,
+                        timeout=30,
+                    )
+                    dx_idx = cb.text.find("/*DX*/")
+                    if dx_idx < 0:
+                        results.append((key, None))
+                        continue
+                    payload = cb.text[dx_idx + 6:]
+                    payload_clean = payload.replace("\\'", "'").replace("\\r\\n", "\n").replace("\\/", "/")
+                    m = re.search(r"enc=([^&\"'\s>\\]+)", payload_clean)
+                    results.append((key, m.group(1) if m else None))
+                except Exception:
+                    results.append((key, None))
+        except Exception:
+            results.extend((k, None) for k in keys[len(results):])
         finally:
             worker_session.close()
+        return results
 
     def build_cache(self, start: int = 1, end: int = 0, workers: int = 10) -> None:
         """
@@ -846,29 +861,32 @@ class CNBVScraper:
         failed = 0
         start_time = time.time()
 
-        # Process in chunks to show progress
-        chunk_size = workers * 5
-        for chunk_start in range(0, len(uncached), chunk_size):
-            chunk = uncached[chunk_start : chunk_start + chunk_size]
+        # Split uncached keys into batches — each worker gets a batch and
+        # reuses one ViewState for all callbacks (1 GET + N callbacks).
+        batch_size = max(20, len(uncached) // workers)
+        batches = [uncached[i : i + batch_size] for i in range(0, len(uncached), batch_size)]
 
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(self._resolve_enc_worker, k): k for k in chunk}
-                for future in as_completed(futures):
-                    key, enc = future.result()
+        log.info("  Split into %d batches of ~%d keys each", len(batches), batch_size)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(self._resolve_enc_batch, batch): i for i, batch in enumerate(batches)}
+            for future in as_completed(futures):
+                batch_results = future.result()
+                for key, enc in batch_results:
                     if enc:
                         self.cache.put(key, enc)
                         resolved += 1
                     else:
                         failed += 1
 
-            elapsed = time.time() - start_time
-            done = resolved + failed
-            rate = done / elapsed if elapsed > 0 else 0
-            remaining = (len(uncached) - done) / rate if rate > 0 else 0
-            log.info(
-                "  Progress: %d/%d (%.0f/sec, ~%.0fmin remaining) | resolved=%d failed=%d | cache=%d",
-                done, len(uncached), rate, remaining / 60, resolved, failed, self.cache.count(),
-            )
+                elapsed = time.time() - start_time
+                done = resolved + failed
+                rate = done / elapsed if elapsed > 0 else 0
+                remaining = (len(uncached) - done) / rate if rate > 0 else 0
+                log.info(
+                    "  Progress: %d/%d (%.1f/sec, ~%.0fmin remaining) | resolved=%d failed=%d | cache=%d",
+                    done, len(uncached), rate, remaining / 60, resolved, failed, self.cache.count(),
+                )
 
         log.info("=" * 60)
         log.info("Cache build complete: %d resolved, %d failed, %d total cached",
