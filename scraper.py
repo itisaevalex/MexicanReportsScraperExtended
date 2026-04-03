@@ -656,15 +656,16 @@ class CNBVScraper:
         # If no state, do an initial search to find the current highest key
         if last_key == 0:
             log.info("No monitor state found — running initial search to find latest key...")
-            filings = self.search_filings(period="4", max_pages=0)  # Today
-            if not filings:
-                filings = self.search_filings(period="1", max_pages=0)  # Latest
+            filings = self.search_filings(period="2", max_pages=0)  # Last 6 months
             if filings:
                 keys = [int(f["key"]) for f in filings if f.get("key")]
                 last_key = max(keys) if keys else 0
                 log.info("Latest key found: %d", last_key)
                 state["last_key"] = last_key
                 self._save_state(state)
+            else:
+                log.error("Could not find any filings to establish baseline. Use --start-key.")
+                return
 
         log.info("=" * 60)
         log.info("MONITOR MODE — watching for new filings")
@@ -853,6 +854,12 @@ def main() -> int:
         default=300,
         help="Monitor poll interval in seconds (default: 300)",
     )
+    parser.add_argument(
+        "--start-key",
+        type=int,
+        default=0,
+        help="Monitor: start from this filing key instead of auto-detecting",
+    )
     args = parser.parse_args()
 
     max_pages = args.max_pages if args.max_pages >= 0 else 99999
@@ -865,6 +872,11 @@ def main() -> int:
     )
 
     if args.monitor:
+        if args.start_key:
+            # Pre-seed the state so monitor doesn't need to search
+            state_file = os.path.join(os.path.dirname(args.output) or ".", ".monitor_state.json")
+            with open(state_file, "w") as f:
+                json.dump({"last_key": args.start_key}, f)
         scraper.monitor(interval=args.interval)
     else:
         scraper.run()
