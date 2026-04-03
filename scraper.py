@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import sys
 import time
 from datetime import datetime, timedelta
@@ -109,6 +110,74 @@ def sanitize_filename(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Enc cache (SQLite)
+# ---------------------------------------------------------------------------
+
+
+class EncCache:
+    """
+    Persistent cache mapping filing keys to their encrypted enc values.
+
+    The enc values are deterministic and permanent — a key always maps to
+    the same enc. This cache eliminates repeated callbackPanel requests.
+
+    Schema:
+      filings(key INTEGER PRIMARY KEY, enc TEXT, emisora TEXT, asunto TEXT, fecha TEXT, resolved_at TEXT)
+    """
+
+    def __init__(self, db_path: str = "enc_cache.db"):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS filings (
+                key INTEGER PRIMARY KEY,
+                enc TEXT NOT NULL,
+                emisora TEXT,
+                asunto TEXT,
+                fecha TEXT,
+                resolved_at TEXT
+            )
+        """)
+        self.conn.commit()
+
+    def get(self, key: int) -> str | None:
+        """Look up cached enc for a key. Returns None if not cached."""
+        row = self.conn.execute(
+            "SELECT enc FROM filings WHERE key = ?", (key,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def put(self, key: int, enc: str, emisora: str = "", asunto: str = "", fecha: str = "") -> None:
+        """Cache an enc value for a key."""
+        self.conn.execute(
+            "INSERT OR REPLACE INTO filings (key, enc, emisora, asunto, fecha, resolved_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (key, enc, emisora, asunto, fecha, datetime.now().isoformat()),
+        )
+        self.conn.commit()
+
+    def get_max_key(self) -> int:
+        """Return the highest cached key, or 0."""
+        row = self.conn.execute("SELECT MAX(key) FROM filings").fetchone()
+        return row[0] or 0
+
+    def count(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) FROM filings").fetchone()
+        return row[0]
+
+    def get_uncached_keys(self, start: int, end: int) -> list[int]:
+        """Return keys in [start, end] that are NOT in the cache."""
+        cached = set(
+            r[0] for r in self.conn.execute(
+                "SELECT key FROM filings WHERE key BETWEEN ? AND ?", (start, end)
+            ).fetchall()
+        )
+        return [k for k in range(start, end + 1) if k not in cached]
+
+    def close(self):
+        self.conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Scraper class
 # ---------------------------------------------------------------------------
 
@@ -134,6 +203,7 @@ class CNBVScraper:
         self.session.verify = False
         self.hidden_fields: dict[str, str] = {}
         self.search_fields: dict[str, str] = {}  # preserved for pagination
+        self.cache = EncCache()
 
     # ----- Step 1: Initialize session -----
 
@@ -416,7 +486,13 @@ class CNBVScraper:
         Returns:
             The enc value string (URL-encoded), or None if the callback fails.
         """
-        log.debug("Calling callbackPanel for key=%s", key)
+        # Cache-first: check if we already resolved this key
+        cached = self.cache.get(int(key))
+        if cached:
+            log.debug("Cache hit for key=%s", key)
+            return cached
+
+        log.debug("Cache miss — calling callbackPanel for key=%s", key)
 
         cb_data = {
             **self.hidden_fields,
@@ -467,7 +543,9 @@ class CNBVScraper:
             )
             enc_match = re.search(r"enc=([^&\"'\s>]+)", html)
             if enc_match:
-                return enc_match.group(1)
+                enc_val = enc_match.group(1)
+                self.cache.put(int(key), enc_val)
+                return enc_val
 
         return None
 
@@ -667,9 +745,12 @@ class CNBVScraper:
         # Phase 2: Download in parallel (each worker uses its own session)
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {}
-            for idx, enc, hint in to_download:
+            for i, (idx, enc, hint) in enumerate(to_download):
                 future = pool.submit(self._download_worker, enc, hint)
                 futures[future] = idx
+                # Stagger launches to avoid WAF burst detection
+                if i < workers:
+                    time.sleep(0.3)
 
             for future in as_completed(futures):
                 idx = futures[future]
@@ -677,16 +758,137 @@ class CNBVScraper:
                 filings[idx]["pdf_path"] = path
                 if path:
                     log.info("  [%d/%d] Downloaded: %s", idx + 1, len(filings), path)
+                else:
+                    log.warning("  [%d/%d] Download failed", idx + 1, len(filings))
+
+    # ----- Bulk enc cache builder -----
+
+    def _resolve_enc_worker(self, key: int) -> tuple[int, str | None]:
+        """Resolve enc for a single key using a fresh session (thread-safe)."""
+        worker_session = requests.Session()
+        worker_session.verify = False
+        try:
+            r = worker_session.get(PAGE_URL, headers=BROWSER_HEADERS, timeout=30)
+            hidden = extract_hidden_fields(BeautifulSoup(r.text, "html.parser"))
+
+            cb = worker_session.post(
+                PAGE_URL,
+                data={
+                    **hidden,
+                    "__CALLBACKID": "ctl00$DefaultPlaceholder$callbackPanel",
+                    "__CALLBACKPARAM": f"c0:{key}",
+                },
+                headers={
+                    **BROWSER_HEADERS,
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": PAGE_URL,
+                },
+                timeout=30,
+            )
+
+            dx_idx = cb.text.find("/*DX*/")
+            if dx_idx < 0:
+                return key, None
+            payload = cb.text[dx_idx + 6:]
+            # Unescape the JS string first (same as get_filing_enc does)
+            payload_clean = payload.replace("\\'", "'").replace("\\r\\n", "\n").replace("\\/", "/")
+            m = re.search(r"enc=([^&\"'\s>\\]+)", payload_clean)
+            return key, m.group(1) if m else None
+        except Exception as e:
+            log.debug("Worker error for key %d: %s", key, e)
+            return key, None
+        finally:
+            worker_session.close()
+
+    def build_cache(self, start: int = 1, end: int = 0, workers: int = 10) -> None:
+        """
+        Build the enc cache for a range of keys using parallel workers.
+
+        Each worker creates its own session so all enc resolutions happen
+        concurrently. Results are cached to SQLite.
+
+        Args:
+            start: First key to resolve (default: 1).
+            end: Last key to resolve (default: 0 = auto-detect from search).
+            workers: Number of parallel workers (default: 10).
+        """
+        self.initialize()
+
+        if end == 0:
+            log.info("Auto-detecting latest key...")
+            filings = self.search_filings(period="2", max_pages=0)
+            if filings:
+                keys = [int(f["key"]) for f in filings if f.get("key")]
+                end = max(keys) if keys else 0
+            if end == 0:
+                log.error("Could not detect latest key. Use --end-key.")
+                return
+
+        # Find which keys still need resolving
+        uncached = self.cache.get_uncached_keys(start, end)
+        total = end - start + 1
+        already_cached = total - len(uncached)
+
+        log.info("=" * 60)
+        log.info("BUILDING ENC CACHE")
+        log.info("  Range: %d → %d (%d keys)", start, end, total)
+        log.info("  Already cached: %d", already_cached)
+        log.info("  To resolve: %d", len(uncached))
+        log.info("  Workers: %d", workers)
+        log.info("=" * 60)
+
+        if not uncached:
+            log.info("All keys already cached!")
+            return
+
+        resolved = 0
+        failed = 0
+        start_time = time.time()
+
+        # Process in chunks to show progress
+        chunk_size = workers * 5
+        for chunk_start in range(0, len(uncached), chunk_size):
+            chunk = uncached[chunk_start : chunk_start + chunk_size]
+
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(self._resolve_enc_worker, k): k for k in chunk}
+                for future in as_completed(futures):
+                    key, enc = future.result()
+                    if enc:
+                        self.cache.put(key, enc)
+                        resolved += 1
+                    else:
+                        failed += 1
+
+            elapsed = time.time() - start_time
+            done = resolved + failed
+            rate = done / elapsed if elapsed > 0 else 0
+            remaining = (len(uncached) - done) / rate if rate > 0 else 0
+            log.info(
+                "  Progress: %d/%d (%.0f/sec, ~%.0fmin remaining) | resolved=%d failed=%d | cache=%d",
+                done, len(uncached), rate, remaining / 60, resolved, failed, self.cache.count(),
+            )
+
+        log.info("=" * 60)
+        log.info("Cache build complete: %d resolved, %d failed, %d total cached",
+                 resolved, failed, self.cache.count())
+        log.info("=" * 60)
 
     # ----- Monitor mode -----
 
     def _load_state(self) -> dict:
-        """Load monitor state (last known key) from disk."""
-        state_file = os.path.join(os.path.dirname(self.output_path), ".monitor_state.json")
+        """Load monitor state. Prefers cache max key over JSON state file."""
+        cache_max = self.cache.get_max_key()
+        state_file = os.path.join(os.path.dirname(self.output_path) or ".", ".monitor_state.json")
         if os.path.exists(state_file):
             with open(state_file, encoding="utf-8") as f:
-                return json.load(f)
-        return {"last_key": 0}
+                file_state = json.load(f)
+        else:
+            file_state = {"last_key": 0}
+        # Use whichever is higher — cache or state file
+        file_state["last_key"] = max(file_state["last_key"], cache_max)
+        return file_state
 
     def _save_state(self, state: dict) -> None:
         """Persist monitor state to disk."""
@@ -985,7 +1187,18 @@ def main() -> int:
         "--start-key",
         type=int,
         default=0,
-        help="Monitor: start from this filing key instead of auto-detecting",
+        help="Monitor/build-cache: start from this key (default: auto-detect)",
+    )
+    parser.add_argument(
+        "--end-key",
+        type=int,
+        default=0,
+        help="Build-cache: end at this key (default: auto-detect latest)",
+    )
+    parser.add_argument(
+        "--build-cache",
+        action="store_true",
+        help="Build enc cache for a range of keys using parallel workers",
     )
     args = parser.parse_args()
 
@@ -999,7 +1212,13 @@ def main() -> int:
     )
     scraper.parallel_workers = args.parallel
 
-    if args.monitor:
+    if args.build_cache:
+        scraper.build_cache(
+            start=args.start_key or 1,
+            end=args.end_key,
+            workers=args.parallel or 10,
+        )
+    elif args.monitor:
         if args.start_key:
             # Pre-seed the state so monitor doesn't need to search
             state_file = os.path.join(os.path.dirname(args.output) or ".", ".monitor_state.json")
