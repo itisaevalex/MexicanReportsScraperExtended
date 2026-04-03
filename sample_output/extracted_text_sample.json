@@ -1,0 +1,1190 @@
+{
+  "metadata": {
+    "model": "qwen3.5:397b",
+    "total_processed": 39,
+    "note": "Sample output — first 10 of 39 documents, raw_text truncated for brevity"
+  },
+  "documents": [
+    {
+      "filing": {
+        "fecha": "02/04/2026 08:41:00 p. m.",
+        "emisora": "FEMSA",
+        "asunto": "Acta asamblea anual",
+        "key": "453884"
+      },
+      "source_file": "pdfs/Acta+asamblea+anual+FEMSA+2026_27mzo26_VF+cert.pdf",
+      "extracted": {
+        "document_type": "Acta de Asamblea General Ordinaria Anual de Accionistas",
+        "issuer": "FOMENTO ECONÓMICO MEXICANO, S.A.B. DE C.V.",
+        "dates": {
+          "meeting_date": "2026-03-27",
+          "meeting_time": "12:15 horas",
+          "convocation_publication_date": "2026-03-02",
+          "certification_date": "2026-03-27",
+          "fiscal_year": "2025",
+          "tax_report_date": "2025-05-11"
+        },
+        "parties": [
+          {
+            "name": "Alejandro Gil Ortiz",
+            "role": "Secretario del Consejo de Administración"
+          },
+          {
+            "name": "José Antonio Fernández Carbajal",
+            "role": "Presidente"
+          },
+          {
+            "name": "Sergio Rodríguez Pérez",
+            "role": "Escrutador"
+          },
+          {
+            "name": "Yuliana Margarita Exena Delgado",
+            "role": "Escrutadora"
+          },
+          {
+            "name": "Carlos A. Rochin Casanova",
+            "role": "Socio (Emisor del informe de cumplimiento de obligaciones fiscales)"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "8,713,330,500",
+            "currency": "acciones",
+            "description": "Acciones Serie B representadas (95.75% de la serie)"
+          },
+          {
+            "value": "6,663,388,080",
+            "currency": "acciones",
+            "description": "Acciones Serie D representadas (82.66% de la serie)"
+          },
+          {
+            "value": "15,376,718,580",
+            "currency": "acciones",
+            "description": "Total de acciones representadas"
+          },
+          {
+            "value": "17,161,167,575",
+            "currency": "acciones",
+            "description": "Total de acciones en circulación de la Sociedad"
+          }
+        ],
+        "key_terms": [
+          "Serie B",
+          "Serie D",
+          "Auditorio Tecate",
+          "Ley del Mercado de Valores",
+          "Ley del Impuesto sobre la Renta",
+          "Sistema Electrónico de Publicaciones de Sociedades Mercantiles"
+        ],
+        "summary": "This document is the minutes of the Annual Ordinary Shareholders' Meeting of Fomento Económico Mexicano, S.A.B. de C.V., held on March 27, 2026, in Monterrey. The meeting was presided over by José Antonio Fernández Carbajal and certified by Secretary Alejandro Gil Ortiz, achieving a quorum of 89.60% of total shares. The agenda covered the approval of 2025 financial reports, dividend distribution, share buybacks, election of board members and committees, and tax compliance reports. The assembly approved the General Director's report, the Board's opinion, and the financial statements for the 2025 fiscal year.",
+        "raw_text": "ALEJANDRO GIL ORTIZ, Secretario del Consejo de Administración de FOMENTO ECONÓMICO MEXICANO, S.A.B. DE C.V., certifico que la presente es copia fiel y exacta del acta de la Asamblea General Ordinaria Anual de FOMENTO ECONÓMICO MEXICANO, S.A.B. de C.V. celebrada el día hoy.\n\nExtiendo esta certificación en la ciudad de Monterrey, Nuevo León, el día 27 de marzo de 2026.\n\nFOMENTO ECONÓMICO MEXICANO, S.A.B. DE C.V.\n\nAlejandro Gil Ortiz\nSecretario del Consejo de Administración\n\nASAMBLEA GENERAL ORDINA... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:45:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLOB1PI 23-15, 23-16, 23-17, 23-18, 23-19, 23-20 Y 23-21",
+        "key": "453882"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_PUBL_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "document_date": "23 de febrero de 2026",
+          "trust_creation_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Altor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [],
+        "key_terms": [
+          "Contrato de Fideicomiso irrevocable 6309 (antes CIB/3831)",
+          "GLOB1PI 22",
+          "GLOB1PI 22-2",
+          "GLOB1PI 22-3",
+          "GLOB1PI 22-4",
+          "GLOB1PI 22-5",
+          "GLOB1PI 22-6",
+          "GLOB1PI 22-7",
+          "GLOB1PI 22-8",
+          "GLOB1PI 22-9",
+          "GLOB1PI 22-10",
+          "GLOB1PI 22-11",
+          "GLOB1PI 22-12",
+          "GLOB1PI 22-13",
+          "GLOB1PI 22-14",
+          "GLOB1PI 22-15",
+          "GLOB1PI 22-16",
+          "GLOB1PI 22-17",
+          "GLOB1PI 22-18",
+          "GLOB1PI 22-19",
+          "GLOB1PI 22-20",
+          "GLOB1PI 22-21",
+          "GLOB1PI 22-22",
+          "GLOB1PI 22-23",
+          "GLOB1PI 22-24",
+          "GLOB1PI 22-25",
+          "GLOB1PI 22-26",
+          "GLOB1PI 22-27",
+          "GLOB1PI 22-28",
+          "GLOB1PI 22-29",
+          "GLOB1PI 22-30",
+          "GLOB1PI 22-31",
+          "GLOB1PI 22-32",
+          "GLOB1PI 22-33",
+          "GLOB1PI 22-34",
+          "GLOB1PI 22-35",
+          "GLOB1PI 22-36",
+          "GLOB1PI 22-37",
+          "GLOB1PI 23",
+          "GLOB1PI 23-2",
+          "GLOB1PI 23-3",
+          "GLOB1PI 23-4",
+          "GLOB1PI 23-5",
+          "GLOB1PI 23-6",
+          "GLOB1PI 23-7",
+          "GLOB1PI 23-8",
+          "GLOB1PI 23-9",
+          "GLOB1PI 23-10",
+          "GLOB1PI 23-11",
+          "GLOB1PI 23-12",
+          "GLOB1PI 23-13",
+          "GLOB1PI 23-14",
+          "GLOB1PI 23-15",
+          "GLOB1PI 23-16",
+          "GLOB1PI 23-17",
+          "GLOB1PI 23-18",
+          "GLOB1PI 23-19",
+          "GLOB1PI 23-20",
+          "GLOB1PI 23-21",
+          "Certificados Subserie A-1",
+          "Certificados Subserie A-2",
+          "Certificados Subserie B-1 a B-7",
+          "Certificados Subserie C-1 a C-7",
+          "Certificados Subserie D-1 a D-7",
+          "Certificados Subserie E-1 a E-7",
+          "Certificados Subserie F-1 a F-7",
+          "Certificados Subserie G-1 a G-7",
+          "Certificados Subserie H-1 a H-7",
+          "Certificados Subserie I-1 a I-7"
+        ],
+        "summary": "Este documento presenta las Resoluciones Unánimes aprobadas fuera de Asamblea de Tenedores el 23 de febrero de 2026, relativas a los certificados bursátiles fiduciarios de proyectos de inversión (Series A a la I) emitidos por el Fideicomiso 6309 administrado por Banco Actinver. Las resoluciones tienen como objeto aprobar el aumento del Monto Total de la Emisión y la reapertura para la emisión de 2 Subseries Subsecuentes de Certificados, modificando y ampliando el alcance de resoluciones anteriores de diciembre de 2025. Se establece que estas resoluciones tienen la misma validez legal que si hubieran sido aprobadas en una Asamblea de Tenedores, contando con el consentimiento unánime de los tenedores que representan la totalidad de los Certificados en circulación con derecho a voto.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:45:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLOB1PI 23-15, 23-16, 23-17, 23-18, 23-19, 23-20 Y 23-21",
+        "key": "453881"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_RESA_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "document_date": "23 de febrero de 2026",
+          "trust_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Aitor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "540,000,000.00",
+            "currency": "USD",
+            "description": "Monto de aumento al Monto Total de la Emisión"
+          },
+          {
+            "value": "365,000,000.00",
+            "currency": "USD",
+            "description": "Monto correspondiente a la Reapertura para aumentar Series G, H e I"
+          }
+        ],
+        "key_terms": [
+          "Fideicomiso irrevocable 6309",
+          "CIB/3831",
+          "GLOB1PI",
+          "Serie A (Subseries A-1 y A-2)",
+          "Serie B (Subseries B-1 a B-7)",
+          "Serie C (Subseries C-1 a C-7)",
+          "Serie D (Subseries D-1 a D-7)",
+          "Serie E (Subseries E-1 a E-7)",
+          "Serie F (Subseries F-1 a F-7)",
+          "Serie G (Subseries G-1 a G-7)",
+          "Serie H (Subseries H-1 a H-7)",
+          "Serie I (Subseries I-1 a I-7)"
+        ],
+        "summary": "This document presents unanimous resolutions approved outside of a bondholder meeting regarding trust certificates issued by Banco Actinver under trust contract 6309. It details various series (A through I) and subseries of certificates identified by ticker symbols such as GLOB1PI 22-2 through GLOB1PI 23-21. The primary resolution approves an increase in the total issuance amount by up to USD 540,000,000.00. Specifically, USD 365,000,000.00 is allocated for a reopening to increase the total amount of Series G, H, and I certificates, specifically Subseries G-7, H-7, and I-7. The document is dated February 23, 2026, and modifies previous resolutions from December 10, 2025.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:41:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLOB1PI 23-8, 23-9, 23-10, 23-11, 23-12, 23-13 Y 23-14",
+        "key": "453879"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_PUBL_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "document_date": "23 de febrero de 2026",
+          "trust_contract_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Altor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [],
+        "key_terms": [
+          "Fideicomiso irrevocable 6309",
+          "CIB/3831",
+          "GLOB1PI 22",
+          "GLOB1PI 22-2",
+          "GLOB1PI 22-3",
+          "GLOB1PI 22-4",
+          "GLOB1PI 22-5",
+          "GLOB1PI 22-6",
+          "GLOB1PI 22-7",
+          "GLOB1PI 22-8",
+          "GLOB1PI 22-9",
+          "GLOB1PI 22-10",
+          "GLOB1PI 22-11",
+          "GLOB1PI 22-12",
+          "GLOB1PI 22-13",
+          "GLOB1PI 22-14",
+          "GLOB1PI 22-15",
+          "GLOB1PI 22-16",
+          "GLOB1PI 22-17",
+          "GLOB1PI 22-18",
+          "GLOB1PI 22-19",
+          "GLOB1PI 22-20",
+          "GLOB1PI 22-21",
+          "GLOB1PI 22-22",
+          "GLOB1PI 22-23",
+          "GLOB1PI 22-24",
+          "GLOB1PI 22-25",
+          "GLOB1PI 22-26",
+          "GLOB1PI 22-27",
+          "GLOB1PI 22-28",
+          "GLOB1PI 22-29",
+          "GLOB1PI 22-30",
+          "GLOB1PI 22-31",
+          "GLOB1PI 22-32",
+          "GLOB1PI 22-33",
+          "GLOB1PI 22-34",
+          "GLOB1PI 22-35",
+          "GLOB1PI 22-36",
+          "GLOB1PI 22-37",
+          "GLOB1PI 23",
+          "GLOB1PI 23-2",
+          "GLOB1PI 23-3",
+          "GLOB1PI 23-4",
+          "GLOB1PI 23-5",
+          "GLOB1PI 23-6",
+          "GLOB1PI 23-7",
+          "GLOB1PI 23-8",
+          "GLOB1PI 23-9",
+          "GLOB1PI 23-10",
+          "GLOB1PI 23-11",
+          "GLOB1PI 23-12",
+          "GLOB1PI 23-13",
+          "GLOB1PI 23-14",
+          "GLOB1PI 23-15",
+          "GLOB1PI 23-16",
+          "GLOB1PI 23-17",
+          "GLOB1PI 23-18",
+          "GLOB1PI 23-19",
+          "GLOB1PI 23-20",
+          "GLOB1PI 23-21",
+          "Certificados Subserie A-1",
+          "Certificados Subserie A-2",
+          "Certificados Subserie B-1",
+          "Certificados Subserie B-2",
+          "Certificados Subserie B-3",
+          "Certificados Subserie B-4",
+          "Certificados Subserie B-5",
+          "Certificados Subserie B-6",
+          "Certificados Subserie B-7",
+          "Certificados Subserie C-1",
+          "Certificados Subserie C-2",
+          "Certificados Subserie C-3",
+          "Certificados Subserie C-4",
+          "Certificados Subserie C-5",
+          "Certificados Subserie C-6",
+          "Certificados Subserie C-7",
+          "Certificados Subserie D-1",
+          "Certificados Subserie D-2",
+          "Certificados Subserie D-3",
+          "Certificados Subserie D-4",
+          "Certificados Subserie D-5",
+          "Certificados Subserie D-6",
+          "Certificados Subserie D-7",
+          "Certificados Subserie E-1",
+          "Certificados Subserie E-2",
+          "Certificados Subserie E-3",
+          "Certificados Subserie E-4",
+          "Certificados Subserie E-5",
+          "Certificados Subserie E-6",
+          "Certificados Subserie E-7",
+          "Certificados Subserie F-1",
+          "Certificados Subserie F-2",
+          "Certificados Subserie F-3",
+          "Certificados Subserie F-4",
+          "Certificados Subserie F-5",
+          "Certificados Subserie F-6",
+          "Certificados Subserie F-7",
+          "Certificados Subserie G-1",
+          "Certificados Subserie G-2",
+          "Certificados Subserie G-3",
+          "Certificados Subserie G-4",
+          "Certificados Subserie G-5",
+          "Certificados Subserie G-6",
+          "Certificados Subserie G-7",
+          "Certificados Subserie H-1",
+          "Certificados Subserie H-2",
+          "Certificados Subserie H-3",
+          "Certificados Subserie H-4",
+          "Certificados Subserie H-5",
+          "Certificados Subserie H-6",
+          "Certificados Subserie H-7",
+          "Certificados Subserie I-1",
+          "Certificados Subserie I-2",
+          "Certificados Subserie I-3",
+          "Certificados Subserie I-4",
+          "Certificados Subserie I-5",
+          "Certificados Subserie I-6",
+          "Certificados Subserie I-7"
+        ],
+        "summary": "This document presents Unanimous Resolutions approved outside of a Bondholders' Meeting regarding fiduciary investment project securities (Series A through I) issued under Trust 6309. Dated February 23, 2026, the resolutions aim to approve an increase and reopening of the Total Issuance Amount and the issuance of two subsequent Subseries. The document lists all relevant ticker symbols (e.g., GLOB1PI 22, GLOB1PI 23) and identifies the key parties: Banco Actinver as Trustee, Lock Capital Solutions as Settlor, and Altor Casa de Bolsa as Common Representative. It explicitly states that these new resolutions modify and replace previous resolutions approved on December 10, 2025.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:40:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLOB1PI 23-8, 23-9, 23-10, 23-11, 23-12, 23-13 Y 23-14",
+        "key": "453878"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_RESA_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "resolution_date": "23 de febrero de 2026",
+          "trust_contract_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Aitor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "540,000,000.00",
+            "currency": "USD",
+            "description": "Monto Total de la Emisión (aumento aprobado)"
+          },
+          {
+            "value": "365,000,000.00",
+            "currency": "USD",
+            "description": "Monto correspondiente a la Reapertura (para aumentar Series G, H e I)"
+          }
+        ],
+        "key_terms": [
+          "Fideicomiso irrevocable 6309 (antes CIB/3831)",
+          "GLOB1PI 22-2",
+          "GLOB1PI 22-3",
+          "GLOB1PI 22-4",
+          "GLOB1PI 22-5",
+          "GLOB1PI 22-6",
+          "GLOB1PI 22-7",
+          "GLOB1PI 22-8",
+          "GLOB1PI 22-9",
+          "GLOB1PI 22-10",
+          "GLOB1PI 22-11",
+          "GLOB1PI 22-12",
+          "GLOB1PI 22-13",
+          "GLOB1PI 22-14",
+          "GLOB1PI 22-15",
+          "GLOB1PI 22-16",
+          "GLOB1PI 22-17",
+          "GLOB1PI 22-18",
+          "GLOB1PI 22-19",
+          "GLOB1PI 22-20",
+          "GLOB1PI 22-21",
+          "GLOB1PI 22-22",
+          "GLOB1PI 22-23",
+          "GLOB1PI 22-24",
+          "GLOB1PI 22-25",
+          "GLOB1PI 22-26",
+          "GLOB1PI 22-27",
+          "GLOB1PI 22-28",
+          "GLOB1PI 22-29",
+          "GLOB1PI 22-30",
+          "GLOB1PI 22-31",
+          "GLOB1PI 22-32",
+          "GLOB1PI 22-33",
+          "GLOB1PI 22-34",
+          "GLOB1PI 22-35",
+          "GLOB1PI 22-36",
+          "GLOB1PI 22-37",
+          "GLOB1PI 23",
+          "GLOB1PI 23-2",
+          "GLOB1PI 23-3",
+          "GLOB1PI 23-4",
+          "GLOB1PI 23-5",
+          "GLOB1PI 23-6",
+          "GLOB1PI 23-7",
+          "GLOB1PI 23-8",
+          "GLOB1PI 23-9",
+          "GLOB1PI 23-10",
+          "GLOB1PI 23-11",
+          "GLOB1PI 23-12",
+          "GLOB1PI 23-13",
+          "GLOB1PI 23-14",
+          "GLOB1PI 23-15",
+          "GLOB1PI 23-16",
+          "GLOB1PI 23-17",
+          "GLOB1PI 23-18",
+          "GLOB1PI 23-19",
+          "GLOB1PI 23-20",
+          "GLOB1PI 23-21",
+          "Certificados Subserie A-1",
+          "Certificados Subserie A-2",
+          "Certificados Subserie B-1 a B-7",
+          "Certificados Subserie C-1 a C-7",
+          "Certificados Subserie D-1 a D-7",
+          "Certificados Subserie E-1 a E-7",
+          "Certificados Subserie F-1 a F-7",
+          "Certificados Subserie G-1 a G-7",
+          "Certificados Subserie H-1 a H-7",
+          "Certificados Subserie I-1 a I-7"
+        ],
+        "summary": "This document contains Unanimous Resolutions approved outside of a Bondholders' Meeting regarding investment project certificates (Series A through I) issued by Banco Actinver under trust 6309. Dated February 23, 2026, the resolutions modify previous agreements from December 2025 and involve parties such as Lock Capital Solutions (Fideicomitente) and Aitor Casa de Bolsa (Representante Común). A key resolution approves increasing the Total Issuance Amount to up to USD 540,000,000.00, with USD 365,000,000.00 specifically allocated for a reopening to increase the total amount of Series G, H, and I certificates.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:37:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLOB1PI GENERAL",
+        "key": "453876"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_PUBL_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "resolution_date": "23 de febrero de 2026",
+          "trust_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Altor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [],
+        "key_terms": [
+          "6309",
+          "CIB/3831",
+          "GLOB1PI 22",
+          "GLOB1PI 22-2",
+          "GLOB1PI 22-3",
+          "GLOB1PI 22-4",
+          "GLOB1PI 22-5",
+          "GLOB1PI 22-6",
+          "GLOB1PI 22-7",
+          "GLOB1PI 22-8",
+          "GLOB1PI 22-9",
+          "GLOB1PI 22-10",
+          "GLOB1PI 22-11",
+          "GLOB1PI 22-12",
+          "GLOB1PI 22-13",
+          "GLOB1PI 22-14",
+          "GLOB1PI 22-15",
+          "GLOB1PI 22-16",
+          "GLOB1PI 22-17",
+          "GLOB1PI 22-18",
+          "GLOB1PI 22-19",
+          "GLOB1PI 22-20",
+          "GLOB1PI 22-21",
+          "GLOB1PI 22-22",
+          "GLOB1PI 22-23",
+          "GLOB1PI 22-24",
+          "GLOB1PI 22-25",
+          "GLOB1PI 22-26",
+          "GLOB1PI 22-27",
+          "GLOB1PI 22-28",
+          "GLOB1PI 22-29",
+          "GLOB1PI 22-30",
+          "GLOB1PI 22-31",
+          "GLOB1PI 22-32",
+          "GLOB1PI 22-33",
+          "GLOB1PI 22-34",
+          "GLOB1PI 22-35",
+          "GLOB1PI 22-36",
+          "GLOB1PI 22-37",
+          "GLOB1PI 23",
+          "GLOB1PI 23-2",
+          "GLOB1PI 23-3",
+          "GLOB1PI 23-4",
+          "GLOB1PI 23-5",
+          "GLOB1PI 23-6",
+          "GLOB1PI 23-7",
+          "GLOB1PI 23-8",
+          "GLOB1PI 23-9",
+          "GLOB1PI 23-10",
+          "GLOB1PI 23-11",
+          "GLOB1PI 23-12",
+          "GLOB1PI 23-13",
+          "GLOB1PI 23-14",
+          "GLOB1PI 23-15",
+          "GLOB1PI 23-16",
+          "GLOB1PI 23-17",
+          "GLOB1PI 23-18",
+          "GLOB1PI 23-19",
+          "GLOB1PI 23-20",
+          "GLOB1PI 23-21",
+          "Certificados Bursátiles Fiduciarios de Proyectos de Inversión",
+          "Contrato de Fideicomiso"
+        ],
+        "summary": "This document contains unanimous resolutions approved outside of a shareholders' meeting on February 23, 2026, regarding fiduciary investment certificates (Series A through I) issued under trust 6309. The resolutions authorize an increase in the total issuance amount, the reopening of the issuance, the issuance of two subsequent subseries, and modifications to the issuance documents, effectively superseding previous resolutions from December 10, 2025. The involved parties include Banco Actinver as Trustee, Lock Capital Solutions as Settlor and Administrative Services Provider, and Altor Casa de Bolsa as Common Representative.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:35:00 p. m.",
+        "emisora": "ALTORCB",
+        "asunto": "RUA GLO1PI GENERAL",
+        "key": "453875"
+      },
+      "source_file": "pdfs/R1005_LGAL_RUAE_GLOB1_RESA_20260223.pdf",
+      "extracted": {
+        "document_type": "Resoluciones Unánimes Aprobadas Fuera de Asamblea de Tenedores",
+        "issuer": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+        "dates": {
+          "document_date": "23 de febrero de 2026",
+          "trust_agreement_date": "17 de febrero de 2022",
+          "previous_resolutions_date": "10 de diciembre de 2025"
+        },
+        "parties": [
+          {
+            "name": "Banco Actinver, S.A., Institución de Banca Múltiple, Grupo Financiero, División Fiduciaria",
+            "role": "Fiduciario"
+          },
+          {
+            "name": "Lock Capital Solutions, S.A. de C.V.",
+            "role": "Fideicomitente y Prestador de Servicios Administrativos"
+          },
+          {
+            "name": "Aitor Casa de Bolsa, S.A. de C.V.",
+            "role": "Representante Común"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "540,000,000.00",
+            "currency": "USD",
+            "description": "Monto Total de la Emisión (aumento aprobado)"
+          },
+          {
+            "value": "365,000,000.00",
+            "currency": "USD",
+            "description": "Monto correspondiente a la Reapertura para Series G, H e I"
+          }
+        ],
+        "key_terms": [
+          "Fideicomiso irrevocable 6309 (antes CIB/3831)",
+          "GLOB1PI 22-2",
+          "GLOB1PI 22-3",
+          "GLOB1PI 22-4",
+          "GLOB1PI 22-5",
+          "GLOB1PI 22-6",
+          "GLOB1PI 22-7",
+          "GLOB1PI 22-8",
+          "GLOB1PI 22-9",
+          "GLOB1PI 22-10",
+          "GLOB1PI 22-11",
+          "GLOB1PI 22-12",
+          "GLOB1PI 22-13",
+          "GLOB1PI 22-14",
+          "GLOB1PI 22-15",
+          "GLOB1PI 22-16",
+          "GLOB1PI 22-17",
+          "GLOB1PI 22-18",
+          "GLOB1PI 22-19",
+          "GLOB1PI 22-20",
+          "GLOB1PI 22-21",
+          "GLOB1PI 22-22",
+          "GLOB1PI 22-23",
+          "GLOB1PI 22-24",
+          "GLOB1PI 22-25",
+          "GLOB1PI 22-26",
+          "GLOB1PI 22-27",
+          "GLOB1PI 22-28",
+          "GLOB1PI 22-29",
+          "GLOB1PI 22-30",
+          "GLOB1PI 22-31",
+          "GLOB1PI 22-32",
+          "GLOB1PI 22-33",
+          "GLOB1PI 22-34",
+          "GLOB1PI 22-35",
+          "GLOB1PI 22-36",
+          "GLOB1PI 22-37",
+          "GLOB1PI 23",
+          "GLOB1PI 23-2",
+          "GLOB1PI 23-3",
+          "GLOB1PI 23-4",
+          "GLOB1PI 23-5",
+          "GLOB1PI 23-6",
+          "GLOB1PI 23-7",
+          "GLOB1PI 23-8",
+          "GLOB1PI 23-9",
+          "GLOB1PI 23-10",
+          "GLOB1PI 23-11",
+          "GLOB1PI 23-12",
+          "GLOB1PI 23-13",
+          "GLOB1PI 23-14",
+          "GLOB1PI 23-15",
+          "GLOB1PI 23-16",
+          "GLOB1PI 23-17",
+          "GLOB1PI 23-18",
+          "GLOB1PI 23-19",
+          "GLOB1PI 23-20",
+          "GLOB1PI 23-21",
+          "Serie A (Subseries A-1 y A-2)",
+          "Serie B (Subseries B-1 a B-7)",
+          "Serie C (Subseries C-1 a C-7)",
+          "Serie D (Subseries D-1 a D-7)",
+          "Serie E (Subseries E-1 a E-7)",
+          "Serie F (Subseries F-1 a F-7)",
+          "Serie G (Subseries G-1 a G-7)",
+          "Serie H (Subseries H-1 a H-7)",
+          "Serie I (Subseries I-1 a I-7)"
+        ],
+        "summary": "Este documento presenta las Resoluciones Unánimes aprobadas fuera de asamblea por los tenedores de certificados bursátiles fiduciarios de proyectos de inversión (Series A a la I) emitidos por Banco Actinver como fiduciario. Las resoluciones modifican y amplían acuerdos anteriores aprobados el 10 de diciembre de 2025. Se aprueba aumentar el Monto Total de la Emisión hasta por USD$540,000,000.00, de los cuales USD$365,000,000.00 corresponden a una reapertura destinada a aumentar el monto de las Subseries G-7, H-7 e I-7. El fideicomiso subyacente es el número 6309 (anteriormente CIB/3831), constituido el 17 de febrero de 2022.",
+        "raw_text": "RESOLUCIONES UNÁNIMES APROBADAS FUERA DE ASAMBLEA DE TENEDORES\n\nPor los tenedores de los certificados bursátiles fiduciarios de proyectos de inversión Serie A (Subseries A-1 y A-2), Serie B (Subseries B-1 a B-7), Serie C (Subseries C-1 a C-7), Serie D (Subseries D-1 a D-7), Serie E (Subseries E-1 a E-7), Serie F (Subseries F-1 a F-7), Serie G (Subseries G-1 a G-7), Serie H (Subseries H-1 a H-7) y Serie I (Subseries I-1 a I-7), no amortizables sujetos al mecanismo de derechos de suscripción, iden... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:14:00 p. m.",
+        "emisora": "PRUDENT",
+        "asunto": "CARTRAC MEXTRAC 01042026",
+        "key": "453874"
+      },
+      "source_file": "pdfs/CARTRAC+MEXTRAC.xls",
+      "extracted": {
+        "document_type": "Composición y Valor Teórico",
+        "issuer": "Fideicomiso F/4826 MEXTRAC 09",
+        "dates": {
+          "report_date": "Wednesday 1 April 2026",
+          "formatted_date": "01/04/2026"
+        },
+        "parties": [
+          {
+            "name": "AC",
+            "role": "Emisora"
+          },
+          {
+            "name": "AMX",
+            "role": "Emisora"
+          },
+          {
+            "name": "ASUR",
+            "role": "Emisora"
+          },
+          {
+            "name": "BBAJIO",
+            "role": "Emisora"
+          },
+          {
+            "name": "BIMBO",
+            "role": "Emisora"
+          },
+          {
+            "name": "BOLSA",
+            "role": "Emisora"
+          },
+          {
+            "name": "CHDRAUI",
+            "role": "Emisora"
+          },
+          {
+            "name": "FEMSA",
+            "role": "Emisora"
+          },
+          {
+            "name": "GAP",
+            "role": "Emisora"
+          },
+          {
+            "name": "GCC",
+            "role": "Emisora"
+          },
+          {
+            "name": "GENTERA",
+            "role": "Emisora"
+          },
+          {
+            "name": "GFNORTE",
+            "role": "Emisora"
+          },
+          {
+            "name": "GMEXICO",
+            "role": "Emisora"
+          },
+          {
+            "name": "GRUMA",
+            "role": "Emisora"
+          },
+          {
+            "name": "KIMBER",
+            "role": "Emisora"
+          },
+          {
+            "name": "KOF",
+            "role": "Emisora"
+          },
+          {
+            "name": "MEGA",
+            "role": "Emisora"
+          },
+          {
+            "name": "OMA",
+            "role": "Emisora"
+          },
+          {
+            "name": "PINFRA",
+            "role": "Emisora"
+          },
+          {
+            "name": "Q",
+            "role": "Emisora"
+          },
+          {
+            "name": "R",
+            "role": "Emisora"
+          },
+          {
+            "name": "SIGMAF",
+            "role": "Emisora"
+          },
+          {
+            "name": "TLEVISA",
+            "role": "Emisora"
+          },
+          {
+            "name": "VESTA",
+            "role": "Emisora"
+          },
+          {
+            "name": "WALMEX",
+            "role": "Emisora"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "4,000,000,000",
+            "currency": "MXN",
+            "description": "Numero de Certificados Emitidos"
+          },
+          {
+            "value": "309,000,000",
+            "currency": "MXN",
+            "description": "Numero de Certificados en Circulacion"
+          },
+          {
+            "value": "6,180",
+            "currency": "MXN",
+            "description": "Unidades Minimas de Conversión"
+          },
+          {
+            "value": "20,850,992,461.83",
+            "currency": "MXN",
+            "description": "Valor Teorico del Fideicomiso"
+          },
+          {
+            "value": "3,373,947.00",
+            "currency": "MXN",
+            "description": "Valor Teorico de la Unidad"
+          },
+          {
+            "value": "67.4789",
+            "currency": "MXN",
+            "description": "Precio Teorico por Certificado"
+          },
+          {
+            "value": "417.84",
+            "currency": "MXN",
+            "description": "Efectivo"
+          }
+        ],
+        "key_terms": [
+          "F/4826",
+          "MEXTRAC 09",
+          "MEXTRAC",
+          "09",
+          "MX01AC100006",
+          "MX01AM050019",
+          "MXP001661018",
+          "MX41BB000000",
+          "MXP495211262",
+          "MX01BM1B0000",
+          "MX01CH170002",
+          "MXP320321310",
+          "MX01GA000004",
+          "MX01GC2M0006",
+          "MX01GE0E0004",
+          "MXP370711014",
+          "MXP370841019",
+          "MXP4948K1056",
+          "MXP606941179",
+          "MX01KO000002",
+          "MX01ME090003",
+          "MX01OM000018",
+          "MX01PI000005",
+          "MX01Q0000008",
+          "MX01R0000006",
+          "MXP000511016",
+          "MXP4987V1378",
+          "MX01VE0M0003",
+          "MX01WA000038"
+        ],
+        "summary": "This document presents the composition and theoretical value report for Fideicomiso F/4826 MEXTRAC 09 as of April 1, 2026. It details the portfolio holdings, listing 25 underlying issuers (such as AMX, WALMEX, FEMSA) along with their ISIN codes and the number of shares held. The report states that there are 309,000,000 certificates in circulation out of 4,000,000,000 issued, with a total theoretical trust value of approximately 20.85 billion MXN. The theoretical price per certificate is calculated at 67.4789 MXN.",
+        "raw_text": "Fideicomiso F/4826 MEXTRAC 09\nComposición y Valor Teórico de la Unidad Mínima de Conversión, Precio Teórico del ME> Número de Certificados en Circulación al\nWednesday 1 April 2026\nFECHA\nCLAVE DE PIZARRA\nSERIE\nNUMERO DE CERTIFICADOS EMITIDOS\nNUMERO DE CERTIFICADOS EN CIRCULACION\nUNIDADES MINIMAS DE CONVERSIÓN\nVALOR TEORICO DEL FIDEICOMISO\nVALOR TEORICO DE LA UNIDAD\nPRECIO TEORICO POR CERTIFICADO\nEmisora Serie ISIN\nAC * MX01AC100006\nAMX B MX01AM050019\nASUR B MXP001661018\nBBAJIO O MX41BB000000\nBIMB... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:14:00 p. m.",
+        "emisora": "PRUDENT",
+        "asunto": "CARTRAC FIBRATC 01042026",
+        "key": "453873"
+      },
+      "source_file": "pdfs/CARTRAC+FIBRATC.xls",
+      "extracted": {
+        "document_type": "Composición y Valor Teórico de la Unidad Mínima de Conversión",
+        "issuer": "Fideicomiso F/4825 FIBRATC 14",
+        "dates": {
+          "report_date": "Wednesday 1 April 2026",
+          "filing_date": "01/04/2026"
+        },
+        "parties": [
+          {
+            "name": "DANHOS",
+            "role": "Emisora"
+          },
+          {
+            "name": "FIBRAMQ",
+            "role": "Emisora"
+          },
+          {
+            "name": "FIBRAPL",
+            "role": "Emisora"
+          },
+          {
+            "name": "FIHO",
+            "role": "Emisora"
+          },
+          {
+            "name": "FINN",
+            "role": "Emisora"
+          },
+          {
+            "name": "FMTY",
+            "role": "Emisora"
+          },
+          {
+            "name": "FPLUS",
+            "role": "Emisora"
+          },
+          {
+            "name": "FSHOP",
+            "role": "Emisora"
+          },
+          {
+            "name": "FUNO",
+            "role": "Emisora"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "2,500,000,000",
+            "currency": "MXN",
+            "description": "Numero de Certificados Emitidos"
+          },
+          {
+            "value": "17,000,000",
+            "currency": "MXN",
+            "description": "Numero de Certificados en Circulacion"
+          },
+          {
+            "value": "170",
+            "currency": "MXN",
+            "description": "Unidades Minimas de Conversion"
+          },
+          {
+            "value": "447,200,710.06",
+            "currency": "MXN",
+            "description": "Valor Teorico del Fideicomiso"
+          },
+          {
+            "value": "2,630,592.41",
+            "currency": "MXN",
+            "description": "Valor Teorico de la Unidad"
+          },
+          {
+            "value": "26.3059",
+            "currency": "MXN",
+            "description": "Precio Teorico por Certificado"
+          },
+          {
+            "value": "889.77",
+            "currency": "MXN",
+            "description": "Efectivo"
+          }
+        ],
+        "key_terms": [
+          "F/4825",
+          "FIBRATC 14",
+          "FIBRATC",
+          "Serie 14",
+          "MXCFDA020005",
+          "MXCFFI0U0002",
+          "MXCFFI170008",
+          "MXCFFI0T0005",
+          "MXCFFI0V0001",
+          "MXCFFM010000",
+          "MXCFFP050003",
+          "MXCFFS000005",
+          "MXCFFU000001"
+        ],
+        "summary": "This document details the composition and theoretical value of the Minimum Conversion Unit and the theoretical price of FIBF certificates for Fideicomiso F/4825 FIBRATC 14 as of April 1, 2026. It reports 17,000,000 certificates in circulation out of 2,500,000,000 issued, with a total theoretical trust value of approximately 447 million MXN. The portfolio includes holdings in various real estate investment trusts (FIBRAs) such as DANHOS, FIBRAMQ, and FIBRAPL, along with a cash position.",
+        "raw_text": "Fideicomiso F/4825 FIBRATC 14\nComposición y Valor Teórico de la Unidad Mínima de Conversión, Precio Teórico del FIBF Número de Cerificados en Circulación al\nWednesday 1 April 2026\nFECHA\nCLAVE DE PIZARRA\nSERIE\nNUMERO DE CERTIFICADOS EMITIDOS\nNUMERO DE CERTIFICADOS EN CIRCULACION\nUNIDADES MINIMAS DE CONVERSIÓN\nVALOR TEORICO DEL FIDEICOMISO\nVALOR TEORICO DE LA UNIDAD\nPRECIO TEORICO POR CERTIFICADO\nEmisora Serie ISIN\nDANHOS 13 MXCFDA020005\nFIBRAMQ 12 MXCFFI0U0002\nFIBRAPL 14 MXCFFI170008\nFIHO 12 MXCF... [truncated]"
+      }
+    },
+    {
+      "filing": {
+        "fecha": "01/04/2026 07:13:00 p. m.",
+        "emisora": "PRUDENT",
+        "asunto": "CARTRAC CHNTRAC 01042026",
+        "key": "453872"
+      },
+      "source_file": "pdfs/CARTRAC+CHNTRAC.xls",
+      "extracted": {
+        "document_type": "Informe de Composición y Valor Teórico",
+        "issuer": "Fideicomiso F/4824 CHNTRAC 11",
+        "dates": {
+          "report_date": "Wednesday 1 April 2026",
+          "formatted_date": "01/04/2026"
+        },
+        "parties": [
+          {
+            "name": "BABA",
+            "role": "Emisora"
+          },
+          {
+            "name": "BIDU",
+            "role": "Emisora"
+          },
+          {
+            "name": "BILI",
+            "role": "Emisora"
+          },
+          {
+            "name": "EDU",
+            "role": "Emisora"
+          },
+          {
+            "name": "GDS",
+            "role": "Emisora"
+          },
+          {
+            "name": "HSAI",
+            "role": "Emisora"
+          },
+          {
+            "name": "HTHT",
+            "role": "Emisora"
+          },
+          {
+            "name": "JD",
+            "role": "Emisora"
+          },
+          {
+            "name": "JOYY",
+            "role": "Emisora"
+          },
+          {
+            "name": "NTES",
+            "role": "Emisora"
+          },
+          {
+            "name": "ONC",
+            "role": "Emisora"
+          },
+          {
+            "name": "PNGAY",
+            "role": "Emisora"
+          },
+          {
+            "name": "TAL",
+            "role": "Emisora"
+          },
+          {
+            "name": "TCEHY",
+            "role": "Emisora"
+          },
+          {
+            "name": "TCOM",
+            "role": "Emisora"
+          },
+          {
+            "name": "TME",
+            "role": "Emisora"
+          },
+          {
+            "name": "VIPS",
+            "role": "Emisora"
+          },
+          {
+            "name": "YUMC",
+            "role": "Emisora"
+          },
+          {
+            "name": "ZLAB",
+            "role": "Emisora"
+          },
+          {
+            "name": "ZTO",
+            "role": "Emisora"
+          }
+        ],
+        "amounts": [
+          {
+            "value": "2,500,000,000",
+            "currency": "N/A",
+            "description": "Numero de Certificados Emitidos"
+          },
+          {
+            "value": "300,000",
+            "currency": "N/A",
+            "description": "Numero de Certificados en Circulacion"
+          },
+          {
+            "value": "13,686,515.07",
+            "currency": "N/A",
+            "description": "Valor Teorico del Fideicomiso"
+          },
+          {
+            "value": "4,562,171.69",
+            "currency": "N/A",
+            "description": "Valor Teorico de la Unidad"
+          },
+          {
+            "value": "45.621717",
+            "currency": "N/A",
+            "description": "Precio Teorico por Certificado"
+          },
+          {
+            "value": "1,006.32",
+            "currency": "USD",
+            "description": "Efectivo"
+          }
+        ],
+        "key_terms": [
+          "F/4824",
+          "CHNTRAC 11",
+          "US01609W1027",
+          "US0567521085",
+          "US0900401060",
+          "US6475812060",
+          "US36165L1089",
+          "US4280501085",
+          "US44332N1063",
+          "US47215P1066",
+          "US46591M1099",
+          "US64110W1027",
+          "US07725L1026",
+          "US72341E3045",
+          "US8740801043",
+          "US88032Q1094",
+          "US89677Q1076",
+          "US88034P1093",
+          "US92763W1036",
+          "US98850P1093",
+          "US98887Q1040",
+          "US98980A1051"
+        ],
+        "summary": "This document details the composition and theoretical value of Fideicomiso F/4824 CHNTRAC 11 as of April 1, 2026. It lists 20 underlying equity issuers primarily traded in the US market (such as BABA, BIDU, JD) along with a cash position labeled 'EFECTIVO'. The report indicates 300,000 certificates in circulation out of 2.5 billion emitted, with a theoretical trust value of approximately 13.6 million and a price per certificate of 45.621717.",
+        "raw_text": "Fideicomiso F/4824 CHNTRAC 11\nComposición y Valor Teórico de la Unidad Mínima de Conversión, Precio Teórico del CHN\nNúmero de Certificados en Circulación al\nWednesday 1 April 2026\nFECHA\nCLAVE DE PIZARRA\nSERIE\nNUMERO DE CERTIFICADOS EMITIDOS\nNUMERO DE CERTIFICADOS EN CIRCULACION\nUNIDADES MINIMAS DE CONVERSIÓN\nVALOR TEORICO DEL FIDEICOMISO\nVALOR TEORICO DE LA UNIDAD\nPRECIO TEORICO POR CERTIFICADO\nEmisora Serie ISIN\nBABA N US01609W1027\nBIDU N US0567521085\nBILI N US0900401060\nEDU N US6475812060\nGDS ... [truncated]"
+      }
+    }
+  ]
+}

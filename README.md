@@ -168,10 +168,9 @@ Tested `qwen3-vl:235b-instruct` vs `qwen3.5:397b` on real CNBV filings. Both ext
 ## Project Structure
 
 ```
-scraper.py          # Scraper: filings table + document downloads
-extract_text.py     # OCR: structured JSON extraction from documents
-filings.json        # Output: filing metadata (generated)
-extracted_text.json # Output: OCR-extracted structured JSON (generated)
-pdfs/               # Output: downloaded documents (generated)
-README.md           # This file
+scraper.py                              # Scraper: filings table + document downloads
+extract_text.py                         # OCR: structured JSON extraction from documents
+sample_output/filings.json              # Sample: 40 filings metadata (2 pages)
+sample_output/extracted_text_sample.json # Sample: 10 OCR-extracted documents
+README.md                               # This file
 ```
