@@ -91,6 +91,17 @@ class TestFilingsDBSchema:
         assert "schema_version" in tables
         db.close()
 
+    def test_creates_crawl_log_table(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        tables = {
+            row[0]
+            for row in db.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "crawl_log" in tables
+        db.close()
+
     def test_schema_is_idempotent(self, tmp_path):
         """Opening the same DB twice should not raise."""
         path = str(tmp_path / "idempotent.db")
@@ -99,12 +110,12 @@ class TestFilingsDBSchema:
         db2 = FilingsDB(path)
         db2.close()
 
-    def test_migration_sets_version_1(self, tmp_path):
+    def test_migration_sets_version_2(self, tmp_path):
         db = FilingsDB(str(tmp_path / "test.db"))
         row = db.conn.execute(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
         ).fetchone()
-        assert row[0] == 1
+        assert row[0] == 2
         db.close()
 
     def test_migration_is_idempotent_on_existing_columns(self, tmp_path):
@@ -253,7 +264,104 @@ class TestFilingsDBDateRange:
 
 
 # ---------------------------------------------------------------------------
-# CNBVScraper._compute_stats health detection tests
+# FilingsDB crawl_log helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestCrawlLog:
+    def test_get_last_crawl_log_none_when_empty(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        assert db.get_last_crawl_log() is None
+        db.close()
+
+    def test_log_crawl_start_returns_int_id(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        log_id = db.log_crawl_start("crawl")
+        assert isinstance(log_id, int)
+        assert log_id > 0
+        db.close()
+
+    def test_log_crawl_start_leaves_completed_at_null(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        log_id = db.log_crawl_start("crawl")
+        row = db.get_last_crawl_log()
+        assert row is not None
+        assert row["id"] == log_id
+        assert row["completed_at"] is None
+        db.close()
+
+    def test_log_crawl_complete_fills_completion_data(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        log_id = db.log_crawl_start("crawl")
+        db.log_crawl_complete(
+            log_id,
+            filings_found=20,
+            filings_new=5,
+            pages_crawled=3,
+            errors=None,
+        )
+        row = db.get_last_crawl_log()
+        assert row is not None
+        assert row["completed_at"] is not None
+        assert row["filings_found"] == 20
+        assert row["filings_new"] == 5
+        assert row["pages_crawled"] == 3
+        assert row["errors"] is None
+        assert row["duration_seconds"] is not None
+        assert row["duration_seconds"] >= 0
+        db.close()
+
+    def test_log_crawl_complete_stores_errors(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        log_id = db.log_crawl_start("crawl")
+        db.log_crawl_complete(log_id, errors="timeout on page 2")
+        row = db.get_last_crawl_log()
+        assert row is not None
+        assert row["errors"] == "timeout on page 2"
+        db.close()
+
+    def test_log_crawl_complete_noop_for_unknown_id(self, tmp_path):
+        """Completing a non-existent log_id must not raise."""
+        db = FilingsDB(str(tmp_path / "test.db"))
+        db.log_crawl_complete(99999, filings_found=0)  # should not raise
+        db.close()
+
+    def test_get_last_crawl_log_returns_most_recent(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        id1 = db.log_crawl_start("crawl")
+        db.log_crawl_complete(id1, filings_found=5)
+        id2 = db.log_crawl_start("crawl")
+        db.log_crawl_complete(id2, filings_found=10)
+        row = db.get_last_crawl_log()
+        assert row is not None
+        assert row["id"] == id2
+        assert row["filings_found"] == 10
+        db.close()
+
+    def test_crawl_log_stores_query_params(self, tmp_path):
+        db = FilingsDB(str(tmp_path / "test.db"))
+        log_id = db.log_crawl_start("crawl", query_params='{"period": "2"}')
+        row = db.get_last_crawl_log()
+        assert row is not None
+        assert row["query_params"] == '{"period": "2"}'
+        db.close()
+
+    def test_total_crawl_runs_counts_completed(self, tmp_path):
+        """Only completed crawl_log rows count toward total_crawl_runs."""
+        db = FilingsDB(str(tmp_path / "test.db"))
+        id1 = db.log_crawl_start("crawl")
+        db.log_crawl_complete(id1, filings_found=5)
+        # Started-but-not-completed row:
+        db.log_crawl_start("crawl")
+        completed_count = db.conn.execute(
+            "SELECT COUNT(*) FROM crawl_log WHERE completed_at IS NOT NULL"
+        ).fetchone()[0]
+        assert completed_count == 1
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# CNBVScraper._compute_stats health detection tests (crawl_log-based, 48h)
 # ---------------------------------------------------------------------------
 
 
@@ -266,50 +374,72 @@ class TestComputeStatsHealth:
             filings_db_path=str(tmp_path / "filings_cache.db"),
         )
 
-    def test_health_empty_when_no_filings(self, tmp_path):
+    def test_health_empty_when_no_crawl_log(self, tmp_path):
+        """No crawl_log entries → health is 'empty'."""
         scraper = self._make_scraper(tmp_path)
         stats = scraper._compute_stats()
         assert stats["health"] == "empty"
 
-    def test_health_degraded_when_no_downloads(self, tmp_path):
+    def test_health_ok_when_recent_completed_crawl(self, tmp_path):
+        """Completed crawl within 48h and no errors → health is 'ok'."""
         scraper = self._make_scraper(tmp_path)
-        today_str = datetime.now().strftime("%d/%m/%Y")
-        scraper.filings_db.upsert_filing(
-            filing_id="cnbv_1",
-            ticker="FEMSA",
-            filing_date=today_str,
-            downloaded=False,
-        )
-        stats = scraper._compute_stats()
-        assert stats["health"] == "degraded"
-
-    def test_health_ok_when_downloaded(self, tmp_path):
-        scraper = self._make_scraper(tmp_path)
-        today_str = datetime.now().strftime("%d/%m/%Y")
-        scraper.filings_db.upsert_filing(
-            filing_id="cnbv_1",
-            ticker="FEMSA",
-            filing_date=today_str,
-            downloaded=True,
-            download_path="/tmp/test.pdf",
+        log_id = scraper.filings_db.log_crawl_start("crawl")
+        scraper.filings_db.log_crawl_complete(
+            log_id,
+            filings_found=10,
+            filings_new=10,
+            pages_crawled=1,
+            errors=None,
         )
         stats = scraper._compute_stats()
         assert stats["health"] == "ok"
 
-    def test_health_stale_when_old_data(self, tmp_path):
+    def test_health_stale_when_last_crawl_older_than_48h(self, tmp_path):
+        """Last completed crawl > 48h ago → health is 'stale'."""
         scraper = self._make_scraper(tmp_path)
-        old_date = (datetime.now() - timedelta(days=10)).strftime("%d/%m/%Y")
-        scraper.filings_db.upsert_filing(
-            filing_id="cnbv_1",
-            ticker="FEMSA",
-            filing_date=old_date,
-            downloaded=True,
-            download_path="/tmp/test.pdf",
+        old_completed = (datetime.now() - timedelta(hours=49)).isoformat()
+        old_started = (datetime.now() - timedelta(hours=50)).isoformat()
+        scraper.filings_db.conn.execute(
+            """
+            INSERT INTO crawl_log
+                (crawl_type, source, filings_found, filings_new, pages_crawled,
+                 errors, started_at, completed_at, duration_seconds)
+            VALUES ('crawl', 'cnbv', 5, 5, 1, NULL, ?, ?, 60.0)
+            """,
+            (old_started, old_completed),
         )
+        scraper.filings_db.conn.commit()
         stats = scraper._compute_stats()
         assert stats["health"] == "stale"
 
+    def test_health_degraded_when_last_crawl_had_errors(self, tmp_path):
+        """Last crawl completed but had errors → health is 'degraded'."""
+        scraper = self._make_scraper(tmp_path)
+        log_id = scraper.filings_db.log_crawl_start("crawl")
+        scraper.filings_db.log_crawl_complete(
+            log_id,
+            filings_found=10,
+            filings_new=0,
+            pages_crawled=1,
+            errors="HTTP 500 on page 2",
+        )
+        stats = scraper._compute_stats()
+        assert stats["health"] == "degraded"
+
+    def test_health_error_when_crawl_never_completed(self, tmp_path):
+        """crawl_log row with NULL completed_at → health is 'error'."""
+        scraper = self._make_scraper(tmp_path)
+        # Insert a started-but-not-completed row directly.
+        scraper.filings_db.conn.execute(
+            "INSERT INTO crawl_log (crawl_type, source, started_at) VALUES ('crawl', 'cnbv', ?)",
+            (datetime.now().isoformat(),),
+        )
+        scraper.filings_db.conn.commit()
+        stats = scraper._compute_stats()
+        assert stats["health"] == "error"
+
     def test_health_error_on_exception(self, tmp_path):
+        """An unexpected exception during stats computation → health is 'error'."""
         scraper = self._make_scraper(tmp_path)
         with patch.object(scraper.filings_db, "count_total", side_effect=RuntimeError("DB error")):
             stats = scraper._compute_stats()
@@ -455,36 +585,44 @@ class TestStatsExitCodes:
         assert code == 2
 
     def test_exit_code_0_when_ok(self, tmp_path):
-        # Pre-populate the filings DB with a recent downloaded filing.
+        # Simulate a recently-completed crawl with no errors.
         db = FilingsDB(str(tmp_path / "filings_cache.db"))
-        today_str = datetime.now().strftime("%d/%m/%Y")
-        db.upsert_filing(
-            filing_id="cnbv_1",
-            filing_date=today_str,
-            downloaded=True,
-            download_path="/tmp/f.pdf",
-        )
+        log_id = db.log_crawl_start("crawl")
+        db.log_crawl_complete(log_id, filings_found=5, filings_new=5, pages_crawled=1)
         db.close()
         code = self._run_stats_cmd(tmp_path)
         assert code == 0
 
     def test_exit_code_0_when_degraded(self, tmp_path):
+        # Simulate a recently-completed crawl that had errors → degraded → exit 0.
         db = FilingsDB(str(tmp_path / "filings_cache.db"))
-        today_str = datetime.now().strftime("%d/%m/%Y")
-        db.upsert_filing(filing_id="cnbv_1", filing_date=today_str, downloaded=False)
+        log_id = db.log_crawl_start("crawl")
+        db.log_crawl_complete(
+            log_id,
+            filings_found=5,
+            filings_new=0,
+            pages_crawled=1,
+            errors="connection timeout on page 3",
+        )
         db.close()
         code = self._run_stats_cmd(tmp_path)
         assert code == 0
 
     def test_exit_code_1_when_stale(self, tmp_path):
+        # Simulate a crawl that completed > 48h ago → stale → exit 1.
         db = FilingsDB(str(tmp_path / "filings_cache.db"))
-        old_date = (datetime.now() - timedelta(days=10)).strftime("%d/%m/%Y")
-        db.upsert_filing(
-            filing_id="cnbv_1",
-            filing_date=old_date,
-            downloaded=True,
-            download_path="/tmp/f.pdf",
+        old_completed = (datetime.now() - timedelta(hours=49)).isoformat()
+        old_started = (datetime.now() - timedelta(hours=50)).isoformat()
+        db.conn.execute(
+            """
+            INSERT INTO crawl_log
+                (crawl_type, source, filings_found, filings_new, pages_crawled,
+                 errors, started_at, completed_at, duration_seconds)
+            VALUES ('crawl', 'cnbv', 5, 5, 1, NULL, ?, ?, 60.0)
+            """,
+            (old_started, old_completed),
         )
+        db.conn.commit()
         db.close()
         code = self._run_stats_cmd(tmp_path)
         assert code == 1

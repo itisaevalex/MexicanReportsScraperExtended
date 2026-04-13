@@ -25,9 +25,13 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class Filing:
-    """Structured representation of a single CNBV filing row."""
+    """Structured representation of a single CNBV filing row.
+
+    Immutable after construction.  Use ``Filing.from_dict`` or keyword
+    construction to create instances; never mutate fields in place.
+    """
 
     fecha: str
     emisora: str
@@ -242,7 +246,7 @@ class FilingsDB:
         created_at TEXT
     """
 
-    _CURRENT_SCHEMA_VERSION = 1
+    _CURRENT_SCHEMA_VERSION = 2
 
     def __init__(self, db_path: str = "filings_cache.db") -> None:
         self.db_path = db_path
@@ -256,7 +260,7 @@ class FilingsDB:
     # ------------------------------------------------------------------
 
     def _create_schema(self) -> None:
-        """Create the filings table and schema_version table if absent."""
+        """Create the filings, crawl_log, and schema_version tables if absent."""
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY
@@ -282,6 +286,20 @@ class FilingsDB:
                 download_path       TEXT,
                 raw_metadata        TEXT,
                 created_at          TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS crawl_log (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                crawl_type       TEXT NOT NULL,
+                source           TEXT DEFAULT 'cnbv',
+                query_params     TEXT,
+                filings_found    INTEGER DEFAULT 0,
+                filings_new      INTEGER DEFAULT 0,
+                pages_crawled    INTEGER DEFAULT 0,
+                errors           TEXT,
+                started_at       TEXT NOT NULL,
+                completed_at     TEXT,
+                duration_seconds REAL
             );
         """)
         self.conn.commit()
@@ -330,6 +348,28 @@ class FilingsDB:
                     pass
             self.conn.execute(
                 "INSERT OR REPLACE INTO schema_version (version) VALUES (1)"
+            )
+            self.conn.commit()
+
+        if current < 2:
+            # Migration 2: add crawl_log table (idempotent via CREATE IF NOT EXISTS).
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS crawl_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    crawl_type       TEXT NOT NULL,
+                    source           TEXT DEFAULT 'cnbv',
+                    query_params     TEXT,
+                    filings_found    INTEGER DEFAULT 0,
+                    filings_new      INTEGER DEFAULT 0,
+                    pages_crawled    INTEGER DEFAULT 0,
+                    errors           TEXT,
+                    started_at       TEXT NOT NULL,
+                    completed_at     TEXT,
+                    duration_seconds REAL
+                )
+            """)
+            self.conn.execute(
+                "INSERT OR REPLACE INTO schema_version (version) VALUES (2)"
             )
             self.conn.commit()
 
@@ -413,6 +453,91 @@ class FilingsDB:
             (download_path, filing_id),
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Crawl log operations
+    # ------------------------------------------------------------------
+
+    def log_crawl_start(
+        self,
+        crawl_type: str,
+        query_params: Optional[str] = None,
+    ) -> int:
+        """Insert a crawl_log row marking the start of a crawl run.
+
+        Args:
+            crawl_type: Identifier for the crawl type (e.g. ``"crawl"``).
+            query_params: Optional JSON-serialised query parameters.
+
+        Returns:
+            The ``id`` (rowid) of the new crawl_log row, to be passed to
+            :meth:`log_crawl_complete` when the run finishes.
+        """
+        cursor = self.conn.execute(
+            """
+            INSERT INTO crawl_log (crawl_type, source, query_params, started_at)
+            VALUES (?, 'cnbv', ?, ?)
+            """,
+            (crawl_type, query_params, datetime.now().isoformat()),
+        )
+        self.conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def log_crawl_complete(
+        self,
+        log_id: int,
+        filings_found: int = 0,
+        filings_new: int = 0,
+        pages_crawled: int = 0,
+        errors: Optional[str] = None,
+    ) -> None:
+        """Update a crawl_log row with completion data.
+
+        Args:
+            log_id: Row id returned by :meth:`log_crawl_start`.
+            filings_found: Total filings found during this run.
+            filings_new: Filings that were newly inserted (not updates).
+            pages_crawled: Number of pagination pages traversed.
+            errors: Optional error summary string; ``None`` if the run
+                completed without errors.
+        """
+        row = self.conn.execute(
+            "SELECT started_at FROM crawl_log WHERE id = ?", (log_id,)
+        ).fetchone()
+        if row is None:
+            return
+
+        completed_at = datetime.now().isoformat()
+        try:
+            started_dt = datetime.fromisoformat(row[0])
+            duration = (datetime.now() - started_dt).total_seconds()
+        except (ValueError, TypeError):
+            duration = None
+
+        self.conn.execute(
+            """
+            UPDATE crawl_log
+            SET filings_found = ?,
+                filings_new   = ?,
+                pages_crawled = ?,
+                errors        = ?,
+                completed_at  = ?,
+                duration_seconds = ?
+            WHERE id = ?
+            """,
+            (filings_found, filings_new, pages_crawled, errors, completed_at, duration, log_id),
+        )
+        self.conn.commit()
+
+    def get_last_crawl_log(self) -> Optional[sqlite3.Row]:
+        """Return the most recent crawl_log row, or None if the table is empty.
+
+        Returns:
+            ``sqlite3.Row`` with all crawl_log columns, or ``None``.
+        """
+        return self.conn.execute(
+            "SELECT * FROM crawl_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()
 
     # ------------------------------------------------------------------
     # Read operations
