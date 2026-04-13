@@ -1,0 +1,21 @@
+[run]
+source = .
+omit =
+    tests/*
+    _investigation/*
+    extract_text.py
+    setup.py
+
+[report]
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    # Debug-only code
+    def __repr__
+    if self\.debug
+    # Abstract methods
+    raise NotImplementedError
+    # Type checking guard
+    if TYPE_CHECKING:
+    # Entry point guard
+    if __name__ == .__main__.:

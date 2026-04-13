@@ -1,0 +1,1 @@
+/*DX*/({'result':'\r\n<input type="hidden" id="DefaultPlaceholder_callbackPanel_PopupWS" value="0:0:-1:-10000:-10000:0:-10000:-10000:1:0:0:0" \/><div id="popup_content"><a href="\/Detalle.aspx?enc=ABC123XYZ%2FencodedAES%2Bvalue%3D">Ver detalle<\/a><\/div>\r\n','id':0})
