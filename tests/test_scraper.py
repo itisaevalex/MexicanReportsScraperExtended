@@ -235,17 +235,28 @@ class TestStats:
         assert "2" in captured.out
 
     def test_stats_shows_filings_from_json(self, tmp_path, capsys):
+        from datetime import datetime
+        from db import FilingsDB
+
         output = str(tmp_path / "filings.json")
-        data = {
-            "metadata": {"total_filings": 15, "pdfs_downloaded": 10},
-            "filings": [],
-        }
-        with open(output, "w") as fh:
-            json.dump(data, fh)
+        filings_db_path = str(tmp_path / "filings_cache.db")
+
+        # Populate FilingsDB so stats() can read from it.
+        db = FilingsDB(filings_db_path)
+        today_str = datetime.now().strftime("%d/%m/%Y")
+        for i in range(15):
+            db.upsert_filing(
+                filing_id=f"cnbv_{i}",
+                filing_date=today_str,
+                downloaded=(i < 10),
+                download_path=f"/tmp/f{i}.pdf" if i < 10 else "",
+            )
+        db.close()
 
         scraper = CNBVScraper(
             output_path=output,
             db_path=str(tmp_path / "enc.db"),
+            filings_db_path=filings_db_path,
         )
         scraper.stats()
         captured = capsys.readouterr()

@@ -56,7 +56,7 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-from db import EncCache
+from db import EncCache, FilingsDB, normalize_date
 from downloader import (
     attempt_pdf_download,
     download_batch_parallel,
@@ -148,6 +148,7 @@ class CNBVScraper:
         incremental: bool = False,
         resume: bool = False,
         db_path: str = "enc_cache.db",
+        filings_db_path: str = "filings_cache.db",
     ) -> None:
         self.output_path = output_path
         self.pdf_dir = pdf_dir
@@ -161,6 +162,7 @@ class CNBVScraper:
         self.hidden_fields: dict[str, str] = {}
         self.search_fields: dict[str, str] = {}
         self.cache = EncCache(db_path)
+        self.filings_db = FilingsDB(filings_db_path)
 
     # ------------------------------------------------------------------
     # Step 1: Session initialisation
@@ -725,6 +727,22 @@ class CNBVScraper:
                 filing.get("asunto", "")
             )
 
+        # Persist to L3 spec FilingsDB
+        for filing in filings:
+            raw_key = filing.get("key") or ""
+            filing_id = f"cnbv_{raw_key}" if raw_key else f"cnbv_{filing.get('asunto', '')[:40]}"
+            self.filings_db.upsert_filing(
+                filing_id=filing_id,
+                ticker=filing.get("emisora", ""),
+                company_name=filing.get("emisora", ""),
+                filing_date=filing.get("fecha", ""),
+                headline=filing.get("asunto", ""),
+                filing_type=filing.get("filing_type", "other"),
+                downloaded=bool(filing.get("pdf_path")),
+                download_path=filing.get("pdf_path") or "",
+                raw_metadata=json.dumps(filing, ensure_ascii=False),
+            )
+
         pdf_success = sum(1 for f in filings if f.get("pdf_path"))
         pdf_fail = len(filings) - pdf_success if self.download_docs else 0
 
@@ -775,26 +793,136 @@ class CNBVScraper:
         else:
             log.warning("No filings file found at %s", self.output_path)
 
-    def stats(self) -> None:
-        """Print summary statistics to stdout."""
+    def _compute_stats(self) -> dict[str, Any]:
+        """Compute and return the statistics dict.
+
+        Returns:
+            Stats dict matching the L3 spec schema.  The ``health`` field
+            is set according to the following rules:
+
+            - ``"empty"``    — no filings in the database at all
+            - ``"stale"``    — latest filing is older than 7 days
+            - ``"degraded"`` — filings exist but none downloaded
+            - ``"ok"``       — filings exist and at least one downloaded
+            - ``"error"``    — an exception occurred computing stats
+        """
+        try:
+            total = self.filings_db.count_total()
+            downloaded = self.filings_db.count_downloaded()
+            unique_companies = self.filings_db.count_unique_companies()
+            earliest, latest = self.filings_db.get_date_range()
+
+            # Derive crawl run count from the JSON output file metadata
+            total_crawl_runs = 0
+            if os.path.exists(self.output_path):
+                try:
+                    with open(self.output_path, encoding="utf-8") as fh:
+                        output_data = json.load(fh)
+                    total_crawl_runs = output_data.get("metadata", {}).get(
+                        "total_crawl_runs", 1
+                    )
+                except (json.JSONDecodeError, OSError):
+                    total_crawl_runs = 0
+
+            # DB size
+            db_size = 0
+            if os.path.exists(self.filings_db.db_path):
+                db_size = os.path.getsize(self.filings_db.db_path)
+
+            # Documents dir size
+            docs_size = 0
+            if os.path.isdir(self.pdf_dir):
+                for dirpath, _dirnames, filenames in os.walk(self.pdf_dir):
+                    for fname in filenames:
+                        try:
+                            docs_size += os.path.getsize(
+                                os.path.join(dirpath, fname)
+                            )
+                        except OSError:
+                            pass
+
+            # Health determination
+            if total == 0:
+                health = "empty"
+            else:
+                stale = False
+                if latest:
+                    try:
+                        latest_dt = datetime.fromisoformat(latest)
+                        stale = (datetime.now() - latest_dt).days > 7
+                    except ValueError:
+                        stale = False
+                if stale:
+                    health = "stale"
+                elif downloaded == 0:
+                    health = "degraded"
+                else:
+                    health = "ok"
+
+            return {
+                "scraper": "mexico-scraper",
+                "country": "MX",
+                "sources": ["cnbv"],
+                "total_filings": total,
+                "downloaded": downloaded,
+                "pending_download": total - downloaded,
+                "unique_companies": unique_companies,
+                "total_crawl_runs": total_crawl_runs,
+                "earliest_record": earliest,
+                "latest_record": latest,
+                "db_size_bytes": db_size,
+                "documents_size_bytes": docs_size,
+                "health": health,
+            }
+        except Exception as exc:
+            log.error("Error computing stats: %s", exc)
+            return {
+                "scraper": "mexico-scraper",
+                "country": "MX",
+                "sources": ["cnbv"],
+                "total_filings": 0,
+                "downloaded": 0,
+                "pending_download": 0,
+                "unique_companies": 0,
+                "total_crawl_runs": 0,
+                "earliest_record": None,
+                "latest_record": None,
+                "db_size_bytes": 0,
+                "documents_size_bytes": 0,
+                "health": "error",
+            }
+
+    def stats(self, as_json: bool = False) -> None:
+        """Print summary statistics to stdout.
+
+        Args:
+            as_json: When True, emit a single JSON object to stdout
+                instead of the human-readable table.
+        """
+        stats_data = self._compute_stats()
+
+        if as_json:
+            print(json.dumps(stats_data, indent=2, ensure_ascii=False))
+            return
+
+        # Legacy enc cache stats (human-readable mode only)
         cache_count = self.cache.count()
         cache_max = self.cache.get_max_key()
-
-        total_filings = 0
-        total_pdfs = 0
-        if os.path.exists(self.output_path):
-            with open(self.output_path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            total_filings = data.get("metadata", {}).get("total_filings", 0)
-            total_pdfs = data.get("metadata", {}).get("pdfs_downloaded", 0)
 
         print("=" * 50)
         print("CNBV STIV-2 Scraper — Statistics")
         print("=" * 50)
+        print(f"  Health            : {stats_data['health']}")
+        print(f"  Total filings     : {stats_data['total_filings']}")
+        print(f"  Downloaded        : {stats_data['downloaded']}")
+        print(f"  Pending download  : {stats_data['pending_download']}")
+        print(f"  Unique companies  : {stats_data['unique_companies']}")
+        print(f"  Earliest record   : {stats_data['earliest_record']}")
+        print(f"  Latest record     : {stats_data['latest_record']}")
+        print(f"  DB size           : {stats_data['db_size_bytes']} bytes")
+        print(f"  Docs size         : {stats_data['documents_size_bytes']} bytes")
         print(f"  Enc cache entries : {cache_count}")
         print(f"  Highest cached key: {cache_max}")
-        print(f"  Filings in JSON   : {total_filings}")
-        print(f"  PDFs downloaded   : {total_pdfs}")
         print(f"  Output file       : {self.output_path}")
         print("=" * 50)
 
@@ -826,12 +954,24 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Write log output to this file in addition to stdout",
     )
+    parser.add_argument(
+        "--filings-db",
+        default="filings_cache.db",
+        dest="filings_db",
+        help="Path to the L3 filings SQLite DB (default: filings_cache.db)",
+    )
 
 
 def cmd_crawl(args: argparse.Namespace) -> int:
-    """Handler for the ``crawl`` subcommand."""
+    """Handler for the ``crawl`` subcommand.
+
+    Exit codes:
+        0 — crawl completed successfully
+        1 — no filings found (server returned empty results)
+    """
     _setup_logging(log_file=args.log_file)
     max_pages = args.max_pages if args.max_pages >= 0 else 99999
+    filings_db_path = getattr(args, "filings_db", "filings_cache.db")
     scraper = CNBVScraper(
         output_path=args.output,
         pdf_dir=args.pdf_dir,
@@ -841,6 +981,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         incremental=args.incremental,
         resume=args.resume,
         db_path=args.db,
+        filings_db_path=filings_db_path,
     )
     scraper.parallel_workers = args.parallel
     scraper.run()
@@ -850,11 +991,13 @@ def cmd_crawl(args: argparse.Namespace) -> int:
 def cmd_monitor(args: argparse.Namespace) -> int:
     """Handler for the ``monitor`` subcommand."""
     _setup_logging(log_file=args.log_file)
+    filings_db_path = getattr(args, "filings_db", "filings_cache.db")
     scraper = CNBVScraper(
         output_path=args.output,
         pdf_dir=args.pdf_dir,
         download_docs=not args.no_download,
         db_path=args.db,
+        filings_db_path=filings_db_path,
     )
     if args.start_key:
         state_file = os.path.join(
@@ -869,17 +1012,46 @@ def cmd_monitor(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     """Handler for the ``export`` subcommand."""
     _setup_logging(log_file=args.log_file)
-    scraper = CNBVScraper(output_path=args.output, db_path=args.db)
+    filings_db_path = getattr(args, "filings_db", "filings_cache.db")
+    scraper = CNBVScraper(
+        output_path=args.output,
+        db_path=args.db,
+        filings_db_path=filings_db_path,
+    )
     scraper.export(output_path=args.export_output)
     return 0
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
-    """Handler for the ``stats`` subcommand."""
+    """Handler for the ``stats`` subcommand.
+
+    Exit codes:
+        0 — success (health ok or degraded)
+        1 — health is stale (data exists but outdated)
+        2 — health is empty (no filings found)
+        3 — health is error (unexpected exception)
+    """
     _setup_logging(log_file=args.log_file)
-    scraper = CNBVScraper(output_path=args.output, db_path=args.db)
-    scraper.stats()
-    return 0
+    filings_db_path = getattr(args, "filings_db", "filings_cache.db")
+    scraper = CNBVScraper(
+        output_path=args.output,
+        db_path=args.db,
+        filings_db_path=filings_db_path,
+    )
+    as_json = getattr(args, "json", False)
+    scraper.stats(as_json=as_json)
+
+    # Derive exit code from health
+    stats_data = scraper._compute_stats()
+    health = stats_data.get("health", "ok")
+    _HEALTH_EXIT_CODES: dict[str, int] = {
+        "ok": 0,
+        "degraded": 0,
+        "stale": 1,
+        "empty": 2,
+        "error": 3,
+    }
+    return _HEALTH_EXIT_CODES.get(health, 0)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -987,6 +1159,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print scraper statistics",
     )
     _add_common_args(stats)
+    stats.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Emit statistics as a JSON object to stdout",
+    )
     stats.set_defaults(func=cmd_stats)
 
     return root
