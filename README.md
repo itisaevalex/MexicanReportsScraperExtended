@@ -13,6 +13,10 @@
 
 *454K filings since 2009 · Parallel downloads · OCR extraction · Real-time monitoring*
 
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](#license)
+
+**Created by Alexander Isaev | [Data Alchemy Labs](https://github.com/itisaevalex)**
+
 </div>
 
 ---
@@ -297,3 +301,9 @@ sample_output/filings.json              # Sample: 40 filings metadata (2 pages)
 sample_output/extracted_text_sample.json # Sample: 10 OCR-extracted documents
 README.md                               # This file
 ```
+
+## License
+
+Copyright (c) 2026 Alexander Isaev / Data Alchemy Labs. All rights reserved.
+
+This software is proprietary. See [LICENSE](LICENSE) for details. Commercial use, redistribution, or derivative works require explicit written authorization.
