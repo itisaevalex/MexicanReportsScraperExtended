@@ -373,3 +373,241 @@ class TestCmdStats:
             cmd_stats(args)
 
         mock_instance.stats.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# ISIN resolution wiring in CNBVScraper
+# ---------------------------------------------------------------------------
+
+
+class TestIsinWiring:
+    """Tests that ISIN lookup is correctly wired into the scraper pipeline."""
+
+    def test_isin_map_default_is_empty(self, tmp_path):
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+        )
+        assert scraper.isin_map == {}
+
+    def test_with_isin_false_does_not_call_load_isin_map(self, tmp_path):
+        """run() must NOT call _load_isin_map when with_isin=False (default)."""
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            download_docs=False,
+            with_isin=False,
+        )
+        sample_filings = [
+            {"fecha": "01/01/2026", "emisora": "FEMSA", "asunto": "Annual", "key": "1"},
+        ]
+        with patch.object(scraper, "initialize"):
+            with patch.object(scraper, "search_filings", return_value=sample_filings):
+                with patch.object(scraper, "_load_isin_map") as mock_load:
+                    scraper.run()
+
+        mock_load.assert_not_called()
+
+    def test_with_isin_true_calls_load_isin_map(self, tmp_path):
+        """run() must call _load_isin_map when with_isin=True."""
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            download_docs=False,
+            with_isin=True,
+        )
+        sample_filings = [
+            {"fecha": "01/01/2026", "emisora": "FEMSA", "asunto": "Annual", "key": "1"},
+        ]
+        with patch.object(scraper, "initialize"):
+            with patch.object(scraper, "search_filings", return_value=sample_filings):
+                with patch.object(scraper, "_load_isin_map") as mock_load:
+                    scraper.run()
+
+        mock_load.assert_called_once()
+
+    def test_isin_populated_from_isin_map(self, tmp_path):
+        """upsert_filing must receive the ISIN for a known emisora."""
+        from db import FilingsDB
+
+        filings_db_path = str(tmp_path / "filings.db")
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            filings_db_path=filings_db_path,
+            download_docs=False,
+            with_isin=True,
+        )
+        scraper.isin_map = {"FEMSA": "MX01FE100003"}
+
+        sample_filings = [
+            {"fecha": "01/01/2026", "emisora": "FEMSA", "asunto": "Annual", "key": "42"},
+        ]
+        with patch.object(scraper, "initialize"):
+            with patch.object(scraper, "search_filings", return_value=sample_filings):
+                with patch.object(scraper, "_load_isin_map"):
+                    scraper.run()
+
+        db = FilingsDB(filings_db_path)
+        row = db.get_filing("cnbv_42")
+        assert row is not None
+        assert row["isin"] == "MX01FE100003"
+        db.close()
+
+    def test_isin_none_when_emisora_not_in_map(self, tmp_path):
+        """Filings for unknown emisoras should get isin=None."""
+        from db import FilingsDB
+
+        filings_db_path = str(tmp_path / "filings.db")
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            filings_db_path=filings_db_path,
+            download_docs=False,
+            with_isin=True,
+        )
+        # BIMBO is not in the map
+        scraper.isin_map = {"FEMSA": "MX01FE100003"}
+
+        sample_filings = [
+            {"fecha": "01/01/2026", "emisora": "BIMBO", "asunto": "Trimestral", "key": "99"},
+        ]
+        with patch.object(scraper, "initialize"):
+            with patch.object(scraper, "search_filings", return_value=sample_filings):
+                with patch.object(scraper, "_load_isin_map"):
+                    scraper.run()
+
+        db = FilingsDB(filings_db_path)
+        row = db.get_filing("cnbv_99")
+        assert row is not None
+        assert row["isin"] is None
+        db.close()
+
+    def test_isin_none_when_with_isin_false(self, tmp_path):
+        """Without --with-isin, isin_map stays empty so all ISINs are None."""
+        from db import FilingsDB
+
+        filings_db_path = str(tmp_path / "filings.db")
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            filings_db_path=filings_db_path,
+            download_docs=False,
+            with_isin=False,
+        )
+
+        sample_filings = [
+            {"fecha": "01/01/2026", "emisora": "FEMSA", "asunto": "Annual", "key": "7"},
+        ]
+        with patch.object(scraper, "initialize"):
+            with patch.object(scraper, "search_filings", return_value=sample_filings):
+                scraper.run()
+
+        db = FilingsDB(filings_db_path)
+        row = db.get_filing("cnbv_7")
+        assert row is not None
+        assert row["isin"] is None
+        db.close()
+
+    def test_load_isin_map_logs_warning_on_failure(self, tmp_path, caplog):
+        """_load_isin_map must log a warning and leave isin_map empty on failure."""
+        import logging
+
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            with_isin=True,
+        )
+        with patch("scraper.load_isin_map", side_effect=Exception("API down")):
+            with caplog.at_level(logging.WARNING):
+                scraper._load_isin_map()
+
+        assert scraper.isin_map == {}
+        assert "BIVA" in caplog.text
+
+    def test_load_isin_map_logs_warning_when_empty(self, tmp_path, caplog):
+        """When load_isin_map returns {}, _load_isin_map must log a warning."""
+        import logging
+
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            with_isin=True,
+        )
+        with patch("scraper.load_isin_map", return_value={}):
+            with caplog.at_level(logging.WARNING):
+                scraper._load_isin_map()
+
+        assert scraper.isin_map == {}
+        assert "BIVA" in caplog.text
+
+    def test_load_isin_map_sets_isin_map_on_success(self, tmp_path):
+        """_load_isin_map must populate self.isin_map when load succeeds."""
+        scraper = CNBVScraper(
+            output_path=str(tmp_path / "f.json"),
+            db_path=str(tmp_path / "enc.db"),
+            with_isin=True,
+        )
+        expected = {"FEMSA": "MX01FE100003", "AC": "MX01AC100006"}
+        with patch("scraper.load_isin_map", return_value=expected):
+            scraper._load_isin_map()
+
+        assert scraper.isin_map == expected
+
+
+class TestCmdCrawlIsinFlags:
+    """Tests that --with-isin and --isin-cache CLI flags are forwarded correctly."""
+
+    def test_with_isin_flag_parsed(self):
+        parser = build_parser()
+        args = parser.parse_args(["crawl", "--with-isin"])
+        assert args.with_isin is True
+
+    def test_with_isin_flag_default_false(self):
+        parser = build_parser()
+        args = parser.parse_args(["crawl"])
+        assert args.with_isin is False
+
+    def test_isin_cache_flag_parsed(self):
+        parser = build_parser()
+        args = parser.parse_args(["crawl", "--isin-cache", "/tmp/my_cache.json"])
+        assert args.isin_cache == "/tmp/my_cache.json"
+
+    def test_isin_cache_flag_default(self):
+        parser = build_parser()
+        args = parser.parse_args(["crawl"])
+        assert args.isin_cache == "_biva_isin_cache.json"
+
+    def test_cmd_crawl_passes_with_isin_to_scraper(self, tmp_path):
+        parser = build_parser()
+        args = parser.parse_args([
+            "crawl",
+            "--with-isin",
+            "--output", str(tmp_path / "out.json"),
+            "--db", str(tmp_path / "enc.db"),
+            "--no-download",
+        ])
+
+        with patch("scraper.CNBVScraper") as MockScraper:
+            MockScraper.return_value = MagicMock()
+            cmd_crawl(args)
+
+        call_kwargs = MockScraper.call_args[1]
+        assert call_kwargs["with_isin"] is True
+
+    def test_cmd_crawl_passes_isin_cache_to_scraper(self, tmp_path):
+        parser = build_parser()
+        args = parser.parse_args([
+            "crawl",
+            "--isin-cache", "/tmp/biva.json",
+            "--output", str(tmp_path / "out.json"),
+            "--db", str(tmp_path / "enc.db"),
+            "--no-download",
+        ])
+
+        with patch("scraper.CNBVScraper") as MockScraper:
+            MockScraper.return_value = MagicMock()
+            cmd_crawl(args)
+
+        call_kwargs = MockScraper.call_args[1]
+        assert call_kwargs["isin_cache_path"] == "/tmp/biva.json"

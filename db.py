@@ -246,7 +246,7 @@ class FilingsDB:
         created_at TEXT
     """
 
-    _CURRENT_SCHEMA_VERSION = 2
+    _CURRENT_SCHEMA_VERSION = 3
 
     def __init__(self, db_path: str = "filings_cache.db") -> None:
         self.db_path = db_path
@@ -271,6 +271,7 @@ class FilingsDB:
                 source              TEXT DEFAULT 'cnbv',
                 country             TEXT DEFAULT 'MX',
                 ticker              TEXT,
+                isin                TEXT,
                 company_name        TEXT,
                 filing_date         TEXT,
                 filing_time         TEXT,
@@ -373,6 +374,18 @@ class FilingsDB:
             )
             self.conn.commit()
 
+        if current < 3:
+            # Migration 3: add isin column for BIVA ISIN lookup results.
+            try:
+                self.conn.execute("ALTER TABLE filings ADD COLUMN isin TEXT")
+            except sqlite3.OperationalError:
+                # Column already exists on a freshly-created schema — safe to ignore.
+                pass
+            self.conn.execute(
+                "INSERT OR REPLACE INTO schema_version (version) VALUES (3)"
+            )
+            self.conn.commit()
+
     # ------------------------------------------------------------------
     # Write operations
     # ------------------------------------------------------------------
@@ -381,6 +394,7 @@ class FilingsDB:
         self,
         filing_id: str,
         ticker: str = "",
+        isin: Optional[str] = None,
         company_name: str = "",
         filing_date: str = "",
         filing_time: str = "",
@@ -403,6 +417,7 @@ class FilingsDB:
         Args:
             filing_id: Unique identifier for this filing.
             ticker: Emisora / ticker code.
+            isin: ISIN for the instrument, resolved via BIVA (may be None).
             company_name: Full company name.
             filing_date: Date of filing (DD/MM/YYYY or YYYY-MM-DD).
             filing_time: Time portion of the filing (HH:MM or similar).
@@ -423,17 +438,17 @@ class FilingsDB:
         self.conn.execute(
             """
             INSERT OR REPLACE INTO filings (
-                filing_id, source, country, ticker, company_name,
+                filing_id, source, country, ticker, isin, company_name,
                 filing_date, filing_time, headline, filing_type, category,
                 document_url, direct_download_url, file_size, num_pages,
                 price_sensitive, downloaded, download_path, raw_metadata, created_at
             ) VALUES (
-                ?, 'cnbv', 'MX', ?, ?, ?, ?, ?, ?, ?,
+                ?, 'cnbv', 'MX', ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
-                filing_id, ticker, company_name,
+                filing_id, ticker, isin, company_name,
                 iso_date, filing_time, headline, filing_type, category,
                 document_url, direct_download_url, file_size, num_pages,
                 price_sensitive, downloaded, download_path, raw_metadata, now,

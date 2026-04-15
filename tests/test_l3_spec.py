@@ -110,12 +110,12 @@ class TestFilingsDBSchema:
         db2 = FilingsDB(path)
         db2.close()
 
-    def test_migration_sets_version_2(self, tmp_path):
+    def test_migration_sets_version_3(self, tmp_path):
         db = FilingsDB(str(tmp_path / "test.db"))
         row = db.conn.execute(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
         ).fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
         db.close()
 
     def test_migration_is_idempotent_on_existing_columns(self, tmp_path):

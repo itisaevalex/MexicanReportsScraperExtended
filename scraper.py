@@ -57,6 +57,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from db import EncCache, FilingsDB, normalize_date
+from isin_cache import load_isin_map
 from downloader import (
     attempt_pdf_download,
     download_batch_parallel,
@@ -149,6 +150,8 @@ class CNBVScraper:
         resume: bool = False,
         db_path: str = "enc_cache.db",
         filings_db_path: str = "filings_cache.db",
+        with_isin: bool = False,
+        isin_cache_path: str = "_biva_isin_cache.json",
     ) -> None:
         self.output_path = output_path
         self.pdf_dir = pdf_dir
@@ -157,12 +160,16 @@ class CNBVScraper:
         self.download_docs = download_docs
         self.incremental = incremental
         self.resume = resume
+        self.with_isin = with_isin
+        self.isin_cache_path = isin_cache_path
         self.parallel_workers = 1
         self.session: requests.Session = make_session()
         self.hidden_fields: dict[str, str] = {}
         self.search_fields: dict[str, str] = {}
         self.cache = EncCache(db_path)
         self.filings_db = FilingsDB(filings_db_path)
+        # Populated by _load_isin_map() during run() when with_isin=True.
+        self.isin_map: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Step 1: Session initialisation
@@ -695,6 +702,34 @@ class CNBVScraper:
             json.dump(data, fh, ensure_ascii=False, indent=2)
 
     # ------------------------------------------------------------------
+    # BIVA ISIN resolution
+    # ------------------------------------------------------------------
+
+    def _load_isin_map(self) -> None:
+        """Populate ``self.isin_map`` from BIVA (cache-first).
+
+        Called at the start of :meth:`run` when ``with_isin=True``.
+        On any failure, ``self.isin_map`` remains ``{}`` and the scraper
+        continues without ISINs (all filings get ``isin=None``).
+        """
+        log.info("BIVA ISIN lookup enabled — loading ISIN map...")
+        try:
+            self.isin_map = load_isin_map(
+                self.session,
+                cache_path=self.isin_cache_path,
+            )
+        except Exception as exc:
+            log.warning(
+                "BIVA: ISIN map load failed: %s — continuing without ISINs", exc
+            )
+            self.isin_map = {}
+
+        if self.isin_map:
+            log.info("BIVA: %d ISIN entries loaded.", len(self.isin_map))
+        else:
+            log.warning("BIVA: ISIN map is empty; filings will have isin=None.")
+
+    # ------------------------------------------------------------------
     # Main crawl pipeline
     # ------------------------------------------------------------------
 
@@ -724,6 +759,11 @@ class CNBVScraper:
 
         try:
             self.initialize()
+
+            # Optional: load BIVA ISIN map before crawling so ISINs are
+            # available at upsert time.  Cache-first — fast on repeat runs.
+            if self.with_isin:
+                self._load_isin_map()
 
             # search_filings handles per-page downloads internally when
             # download_docs=True (download-before-paginate invariant).
@@ -765,10 +805,13 @@ class CNBVScraper:
         for filing in filings:
             raw_key = filing.get("key") or ""
             filing_id = f"cnbv_{raw_key}" if raw_key else f"cnbv_{filing.get('asunto', '')[:40]}"
+            emisora = filing.get("emisora", "").strip().upper()
+            isin: str | None = self.isin_map.get(emisora) if emisora else None
             is_new = self.filings_db.get_filing(filing_id) is None
             self.filings_db.upsert_filing(
                 filing_id=filing_id,
                 ticker=filing.get("emisora", ""),
+                isin=isin,
                 company_name=filing.get("emisora", ""),
                 filing_date=filing.get("fecha", ""),
                 headline=filing.get("asunto", ""),
@@ -1029,6 +1072,8 @@ def cmd_crawl(args: argparse.Namespace) -> int:
     _setup_logging(log_file=args.log_file)
     max_pages = args.max_pages if args.max_pages >= 0 else 99999
     filings_db_path = getattr(args, "filings_db", "filings_cache.db")
+    with_isin = getattr(args, "with_isin", False)
+    isin_cache_path = getattr(args, "isin_cache", "_biva_isin_cache.json")
     scraper = CNBVScraper(
         output_path=args.output,
         pdf_dir=args.pdf_dir,
@@ -1039,6 +1084,8 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         resume=args.resume,
         db_path=args.db,
         filings_db_path=filings_db_path,
+        with_isin=with_isin,
+        isin_cache_path=isin_cache_path,
     )
     scraper.parallel_workers = args.parallel
     scraper.run()
@@ -1168,6 +1215,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume",
         action="store_true",
         help="Resume from the last saved state",
+    )
+    crawl.add_argument(
+        "--with-isin",
+        action="store_true",
+        dest="with_isin",
+        help=(
+            "Resolve ISIN codes via BIVA before storing filings. "
+            "Results are cached in _biva_isin_cache.json so subsequent runs "
+            "are fast. First run takes ~140s (one HTTP call per company)."
+        ),
+    )
+    crawl.add_argument(
+        "--isin-cache",
+        default="_biva_isin_cache.json",
+        dest="isin_cache",
+        help="Path to the BIVA ISIN JSON cache file (default: _biva_isin_cache.json)",
     )
     crawl.set_defaults(func=cmd_crawl)
 
