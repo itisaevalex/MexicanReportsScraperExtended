@@ -7,3 +7,9 @@ __pycache__/
 extracted_text.json
 # enc_cache.db is included as a sample — gitignore only the large production ones
 stress_test_pdfs/
+.coverage
+htmlcov/
+*.db
+*.db-wal
+*.db-shm
+*.deb
